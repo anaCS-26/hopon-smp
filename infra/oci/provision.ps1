@@ -25,14 +25,21 @@
 
 .PARAMETER MaxAttempts
     Give up after this many launch attempts. 0 means keep trying.
+
+.PARAMETER Temporary
+    Launch the stop-gap x86 VM 'mc-temp' (VM.Standard.E5.Flex, 2 OCPU / 12 GB, 50 GB boot) instead
+    of the Always Free Arm VM. It is NOT free: it is paid for by the 30-day trial credit and Oracle
+    deletes it when the trial ends, so it is only for playing while waiting for Arm capacity.
+    Writes state-temp.json. Never use this on an upgraded (Pay As You Go) account.
 #>
 [CmdletBinding()]
 param(
     [string]$SettingsPath = (Join-Path $PSScriptRoot 'settings.json'),
-    [string]$StatePath = (Join-Path $PSScriptRoot 'state.json'),
+    [string]$StatePath,
     [switch]$DryRun,
     [int]$RetrySeconds = 60,
-    [int]$MaxAttempts = 0
+    [int]$MaxAttempts = 0,
+    [switch]$Temporary
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,6 +64,19 @@ $Names = @{
     Instance     = 'mc-server'
 }
 $MinecraftPort = 25565
+$HostnameLabel = 'mcserver'
+
+if ($Temporary) {
+    $Shape              = 'VM.Standard.E5.Flex'
+    $Names.Instance     = 'mc-temp'
+    $HostnameLabel      = 'mctemp'
+    $TempOcpus          = 2
+    $TempMemoryGb       = 12
+    $TempBootVolumeGb   = 50
+}
+if (-not $StatePath) {
+    $StatePath = Join-Path $PSScriptRoot ($(if ($Temporary) { 'state-temp.json' } else { 'state.json' }))
+}
 
 # ---------------------------------------------------------------- helpers
 function Write-Step([string]$Message) {
@@ -140,7 +160,7 @@ try {
         $ours = $live | Where-Object { $_.'display-name' -eq $Names.Instance } | Select-Object -First 1
         if ($live.Count -gt 1 -or ($live.Count -eq 1 -and -not $ours)) {
             $list = ($live | ForEach-Object { "$($_.'display-name') [$($_.'lifecycle-state')]" }) -join ', '
-            throw "Refusing: found A1 instance(s) other than '$($Names.Instance)': $list. Only one A1 VM fits the free allowance."
+            throw "Refusing: found $Shape instance(s) other than '$($Names.Instance)': $list. Only one is allowed."
         }
         return $ours
     }
@@ -261,10 +281,19 @@ try {
         Write-Step "Instance exists: $($Names.Instance) [$($instance.'lifecycle-state')]"
     }
     elseif ($DryRun) {
-        Write-Step "Would launch $($Names.Instance): $Shape, $($Settings.ocpus) OCPU / $($Settings.memoryGb) GB, $($Settings.bootVolumeGb) GB boot, public IP, retry every $RetrySeconds s on capacity errors"
+        $o, $m, $b = if ($Temporary) { $TempOcpus, $TempMemoryGb, $TempBootVolumeGb } else { $Settings.ocpus, $Settings.memoryGb, $Settings.bootVolumeGb }
+        Write-Step "Would launch $($Names.Instance): $Shape, $o OCPU / $m GB, $b GB boot, public IP, retry every $RetrySeconds s on capacity errors"
     }
     else {
-        $shapeConfig = @{ ocpus = [double]$Settings.ocpus; memoryInGBs = [double]$Settings.memoryGb }
+        if ($Temporary) {
+            $shapeConfig = @{ ocpus = [double]$TempOcpus; memoryInGBs = [double]$TempMemoryGb }
+            $bootGb = $TempBootVolumeGb
+            Write-Step "TEMPORARY VM: $Shape $TempOcpus OCPU / $TempMemoryGb GB on trial credit; deleted when the trial ends"
+        }
+        else {
+            $shapeConfig = @{ ocpus = [double]$Settings.ocpus; memoryInGBs = [double]$Settings.memoryGb }
+            $bootGb = $Settings.bootVolumeGb
+        }
         $attempt = 0
         while (-not $instance) {
             $attempt++
@@ -275,9 +304,9 @@ try {
             Write-Step "Launch attempt $attempt"
             try {
                 $instance = (Invoke-Oci compute instance launch --compartment-id $CompartmentId `
-                        --availability-domain $ad --display-name $Names.Instance --hostname-label mcserver `
+                        --availability-domain $ad --display-name $Names.Instance --hostname-label $HostnameLabel `
                         --shape $Shape --shape-config (New-JsonFile $shapeConfig) `
-                        --image-id $image.id --boot-volume-size-in-gbs $Settings.bootVolumeGb `
+                        --image-id $image.id --boot-volume-size-in-gbs $bootGb `
                         --subnet-id $subnet.id --assign-public-ip true `
                         --ssh-authorized-keys-file $SshKeyPath `
                         --wait-for-state RUNNING --max-wait-seconds 900).data
@@ -285,7 +314,7 @@ try {
             catch {
                 $msg = $_.Exception.Message
                 if ($msg -match 'Out of host capacity|OutOfCapacity') {
-                    Write-Step "Oracle is out of Arm capacity. Waiting $RetrySeconds s."
+                    Write-Step "Oracle is out of $Shape capacity. Waiting $RetrySeconds s."
                 }
                 elseif ($msg -match 'TooManyRequests|429') {
                     Write-Step "Rate limited by Oracle. Waiting $($RetrySeconds * 3) s."
@@ -310,6 +339,9 @@ try {
         $vnic = (Get-Data (Invoke-Oci compute instance list-vnics --instance-id $instance.id))[0]
         $state = [ordered]@{
             updated        = (Get-Date).ToString('o')
+            instanceName   = $Names.Instance
+            shape          = $Shape
+            temporary      = [bool]$Temporary
             instanceId     = $instance.id
             instanceState  = $instance.'lifecycle-state'
             publicIp       = $vnic.'public-ip'

@@ -1,6 +1,7 @@
 # ---- Local settings, state and secrets (never commit) ----
 infra/oci/settings.json
 infra/oci/state.json
+infra/oci/state-*.json
 .env
 *.env
 !*.example.env
@@ -17,6 +18,8 @@ id_*
 oracle_mc*
 
 # ---- Worlds, backups and big binaries ----
+world/
+world_*/
 worlds/
 backups/
 migration/

@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Whitelist (and optionally op) a player by their OFFLINE-mode UUID.
+#
+# Why: on this offline-mode server every player, premium or not, plays under the offline UUID
+# (UUID v3 of "OfflinePlayer:<name>"). The vanilla `whitelist add` / `op` commands look the
+# name up with Mojang first, so for any name that also exists as a premium account they store
+# the wrong (online) UUID and the real player is locked out. Names are case-sensitive.
+#
+# Usage: mc-allow <name> [--op]      (run with sudo)
+set -euo pipefail
+
+SERVER_DIR=/srv/minecraft/server
+name="${1:-}"; make_op="${2:-}"
+[[ "$name" =~ ^[A-Za-z0-9_]{3,16}$ ]] || { echo "usage: mc-allow <name> [--op]  (3-16 chars: letters, digits, _)" >&2; exit 2; }
+[ "$(id -u)" -eq 0 ] || { echo "run with sudo" >&2; exit 1; }
+
+uuid=$(python3 -I -c '
+import hashlib, sys, uuid
+h = bytearray(hashlib.md5(("OfflinePlayer:" + sys.argv[1]).encode()).digest())
+h[6] = (h[6] & 0x0F) | 0x30
+h[8] = (h[8] & 0x3F) | 0x80
+print(uuid.UUID(bytes=bytes(h)))' "$name")
+
+edit_json() {  # file, jq filter
+  local f="$SERVER_DIR/$1" tmp
+  [ -s "$f" ] || echo '[]' > "$f"
+  tmp=$(mktemp)
+  jq --arg n "$name" --arg u "$uuid" "$2" "$f" > "$tmp"
+  install -o minecraft -g minecraft -m 0640 "$tmp" "$f"
+  rm -f "$tmp"
+}
+
+# Drop any entry for this name (any case) or UUID, then add the offline one.
+edit_json whitelist.json '[.[] | select((.name | ascii_downcase) != ($n | ascii_downcase) and .uuid != $u)] + [{uuid: $u, name: $n}]'
+echo "Whitelisted $name ($uuid)"
+
+if [ "$make_op" = "--op" ]; then
+  if systemctl is-active --quiet minecraft; then
+    echo "ops.json is only read at startup: stop the server first (sudo systemctl stop minecraft), or run 'op $name' in the console while $name is online." >&2
+    exit 1
+  fi
+  edit_json ops.json '[.[] | select((.name | ascii_downcase) != ($n | ascii_downcase) and .uuid != $u)] + [{uuid: $u, name: $n, level: 4, bypassesPlayerLimit: false}]'
+  echo "Made $name an operator"
+fi
+
+if systemctl is-active --quiet minecraft; then
+  /usr/local/bin/mc-cmd whitelist reload
+fi

@@ -12,6 +12,8 @@
 #                Required on first install. Must match the world's previous server,
 #                or player inventories appear empty (they are stored per player UUID).
 #   HEAP         Java heap, default 6G (half the VM; leaves room for a test server later)
+#   DIFFICULTY / GAMEMODE / HARDCORE   first install only; default normal / survival / false
+#                (gamerules such as pvp or keep_inventory live in the world and carry over)
 #   ACCEPT_EULA  must be "yes": https://aka.ms/MinecraftEULA
 #
 # What it does
@@ -248,10 +250,17 @@ set_prop online-mode "$ONLINE_MODE"
 set_prop white-list true
 set_prop enforce-whitelist true
 set_prop enable-rcon false
+# Offline-mode clients cannot sign chat with a Microsoft profile; EasyAuth needs this off.
+if [ "$ONLINE_MODE" = "false" ]; then set_prop enforce-secure-profile false; fi
 
 # Gameplay defaults only on first install, so later changes (e.g. from the dashboard) stick.
 if $first_install; then
   set_prop level-name world
+  # server.properties overrides the world on startup, so these must match the world's
+  # previous server. Vanilla's own default difficulty is "easy", not "normal".
+  set_prop difficulty "${DIFFICULTY:-normal}"
+  set_prop gamemode "${GAMEMODE:-survival}"
+  set_prop hardcore "${HARDCORE:-false}"
   set_prop max-players 10
   set_prop view-distance 10
   set_prop simulation-distance 8
@@ -308,14 +317,25 @@ Next steps
        sudo chown -R minecraft:minecraft $SERVER_DIR/world
   2. Start:          sudo systemctl start minecraft
   3. Console:        mc-console        (log out and back in once so the minecraft group applies)
+EOF
+if [ "$ONLINE_MODE" = "false" ]; then
+  cat <<EOF
+  4. Players (offline mode): use mc-allow, NOT the vanilla whitelist/op commands, which
+     look names up with Mojang and store the wrong UUID for any name that is also premium:
+       sudo mc-allow Name            (whitelist; names are case-sensitive)
+       sudo mc-allow Name --op       (server stopped)
+EOF
+  [ "$SOFTWARE" = "fabric" ] && cat <<EOF
+  5. EasyAuth (config appears after the first start, in $SERVER_DIR/config/EasyAuth/):
+       main.conf      premium-auto-login=false   (everyone uses /register + /login)
+       extended.conf  forced-offline-uuid=true   (keeps everyone on the offline UUID their
+                                                  world data uses)
+     then restart.
+EOF
+else
+  cat <<EOF
        whitelist add Name    (each player)
        op Name
-EOF
-if [ "$ONLINE_MODE" = "false" ] && [ "$SOFTWARE" = "fabric" ]; then
-  cat <<EOF
-  4. EasyAuth: before anyone joins, review its config in $SERVER_DIR/config/EasyAuth/
-     and make sure premium players are NOT switched to their Microsoft UUID. On a world
-     that was offline-mode, that would make their inventories appear empty.
 EOF
 fi
 cat <<EOF
