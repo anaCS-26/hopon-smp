@@ -1,0 +1,2 @@
+# The root .gitignore ignores Minecraft "worlds/" folders; these are dashboard pages, not worlds.
+!app/(app)/worlds/
