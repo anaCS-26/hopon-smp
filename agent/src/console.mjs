@@ -4,8 +4,8 @@
 import { ValidationError, MC_NAME_RE, compareVersions } from './validate.mjs';
 
 // Game rules friends commonly want. [legacy camelCase, snake_case used since 1.21.11], value type.
-// TODO(verify on 26.x): the snake_case names follow the 1.21.11 rename; if the server answers
-// "Unknown game rule" for one, fix its name here. The console view shows the server's reply.
+// Checked 2026-11-08: all 14 snake_case names below appear in the 26.3 server jar. If a later
+// version answers "Unknown game rule" for one, fix its name here (the console view shows it).
 const GAMERULES = {
   keepInventory: ['keep_inventory', 'bool'],
   doDaylightCycle: ['advance_time', 'bool'],

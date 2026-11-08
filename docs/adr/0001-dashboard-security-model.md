@@ -146,7 +146,7 @@ Browser ──HTTPS──▶ Vercel (Next.js) ──HTTPS + HMAC──▶ Tailsc
 | Minecraft | `minecraft` (sandboxed unit, already in place) | write `/srv/minecraft` only |
 | `mc-agent` | `mcagent` (system user, no login, sandboxed unit, member of group `minecraft` for read-only access to logs and backups) | listen on localhost, read its own state in `/var/lib/mc-agent` |
 | `mc-agent-helper` | `minecraft`, via one sudoers rule | a fixed set of file operations (write properties, swap worlds, install a verified jar, tar a backup, move a world to trash), re-validating every argument |
-| `systemctl start/stop/restart minecraft.service`, `mc-allow <name>` | root, via exact sudoers lines | nothing else |
+| `systemctl start/stop/restart minecraft.service`, `mc-allow <name>` (through the one-name `allow-player` wrapper, since sudo-rs has no regex rules) | root, via exact sudoers lines | nothing else |
 
 - `sudo` resets the environment, so the agent cannot inject `NODE_OPTIONS` or `PATH` into the
   helper.

@@ -25,13 +25,18 @@ id minecraft >/dev/null 2>&1 || die "No 'minecraft' user. Run server/setup-minec
 for b in mc-cmd mc-backup mc-allow; do
   [ -x "/usr/local/bin/$b" ] || die "/usr/local/bin/$b is missing. Install the server helpers first."
 done
-for f in src/main.mjs helper/mc-agent-helper.mjs install/mc-agent.service install/sudoers.mc-agent install/agent.env.example; do
+for f in src/main.mjs helper/mc-agent-helper.mjs install/mc-agent.service install/sudoers.mc-agent install/allow-player install/agent.env.example; do
   [ -f "$SRC/$f" ] || die "Missing $SRC/$f. Copy the whole agent/ folder to the VM."
 done
-sudo_ver="$(sudo -V | sed -n 's/^Sudo version \([0-9.]*\).*/\1/p' | head -n1)"
-if [ "$(printf '%s\n1.9.10\n' "$sudo_ver" | sort -V | head -n1)" != "1.9.10" ]; then
-  die "sudo $sudo_ver is too old for the regex rule in sudoers.mc-agent (needs 1.9.10+)."
-fi
+# Ubuntu 25.10+ uses sudo-rs by default and may also ship classic sudo as sudo.ws. The rules
+# file must parse under every sudo present, or a bad file could break sudo for everyone.
+visudos=()
+for v in /usr/sbin/visudo /usr/sbin/visudo.ws /usr/bin/visudo-rs; do
+  [ -x "$v" ] && visudos+=("$(readlink -f "$v")")
+done
+[ "${#visudos[@]}" -gt 0 ] || die "No visudo found; can't check the sudo rules safely."
+mapfile -t visudos < <(printf '%s\n' "${visudos[@]}" | sort -u)
+sudo -V | head -n1
 
 log "Node.js"
 node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
@@ -80,9 +85,13 @@ chown root:root /etc/mc-agent/hmac-keys /etc/mc-agent/discord-webhook
 chmod 0600 /etc/mc-agent/hmac-keys /etc/mc-agent/discord-webhook
 
 log "sudo rules"
+install -d -o root -g root -m 0755 /usr/local/lib/mc-agent
+install -o root -g root -m 0755 "$SRC/install/allow-player" /usr/local/lib/mc-agent/allow-player
 tmp="$(mktemp)"
 install -m 0440 "$SRC/install/sudoers.mc-agent" "$tmp"
-visudo -cf "$tmp" >/dev/null || { rm -f "$tmp"; die "sudoers.mc-agent failed visudo's check; not installed."; }
+for v in "${visudos[@]}"; do
+  "$v" -c -f "$tmp" >/dev/null || { rm -f "$tmp"; die "sudoers.mc-agent failed $v's check; not installed."; }
+done
 install -o root -g root -m 0440 "$tmp" /etc/sudoers.d/mc-agent
 rm -f "$tmp"
 

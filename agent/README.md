@@ -14,7 +14,8 @@ touch the server. There is no shell and no "run any command".
 - **Runs as `mcagent`,** an unprivileged user. Exact `sudo` rules let it do only three
   privileged things ([install/sudoers.mc-agent](install/sudoers.mc-agent)):
   - start, stop or restart `minecraft.service`
-  - run `mc-allow <name>`
+  - run `mc-allow <name>` for one valid name, through the root-owned
+    [allow-player](install/allow-player) wrapper (never `--op`)
   - run the [helper](helper/mc-agent-helper.mjs), which does a fixed set of file operations
     as `minecraft`
 
@@ -60,7 +61,9 @@ Requirements:
 
 - `server/setup-minecraft.sh` has already been run.
 - `/usr/local/bin/mc-allow` is installed.
-- Ubuntu 24.04 or newer (sudo 1.9.10+, Node.js 20+ from apt).
+- Ubuntu 24.04 or newer (Node.js 20+ from apt). The sudo rules parse under both classic sudo
+  and sudo-rs, the default from Ubuntu 25.10; the installer checks them with every `visudo`
+  it finds.
 
 1. **Copy the `agent/` folder to the VM** (from your laptop, in the repo folder):
    ```bash

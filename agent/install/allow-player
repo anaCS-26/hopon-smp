@@ -1,0 +1,10 @@
+#!/bin/bash
+# /usr/local/lib/mc-agent/allow-player  (root:root 0755)
+# The dashboard agent's only way to whitelist a player: exactly one valid Minecraft name, and
+# never `--op`. sudo-rs (Ubuntu 25.10+) has no regex in sudoers, so the sudo rule allows this
+# wrapper with any arguments and the wrapper does the checking instead.
+set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+[ "$#" -eq 1 ] || { echo "usage: allow-player <name>" >&2; exit 2; }
+[[ "$1" =~ ^[A-Za-z0-9_]{3,16}$ ]] || { echo "allow-player: not a valid Minecraft name" >&2; exit 2; }
+exec /usr/local/bin/mc-allow "$1"
