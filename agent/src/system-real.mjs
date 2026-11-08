@@ -1,6 +1,6 @@
 // The real VM adapter. Every privileged step goes through exact sudo rules:
 //   sudo -n /usr/bin/systemctl start|stop|restart minecraft.service          (root)
-//   sudo -n /usr/local/bin/mc-allow <name>                                   (root)
+//   sudo -n /usr/local/lib/mc-agent/allow-player <name>  (root; runs mc-allow <name>, never --op)
 //   sudo -n -u minecraft /usr/bin/node <helper> <verb> <args...>             (minecraft)
 // See agent/install/sudoers.
 import { execFile, spawn } from 'node:child_process';
@@ -21,7 +21,7 @@ export const PATHS = {
   helper: '/opt/mc-agent/helper/mc-agent-helper.mjs',
   node: '/usr/bin/node',
   systemctl: '/usr/bin/systemctl',
-  mcAllow: '/usr/local/bin/mc-allow',
+  mcAllow: '/usr/local/lib/mc-agent/allow-player', // one-name wrapper around /usr/local/bin/mc-allow
   mcCmd: '/usr/local/bin/mc-cmd',
 };
 

@@ -1,12 +1,14 @@
 # /etc/sudoers.d/mc-agent  (root:root 0440, checked with visudo -cf before install)
 # Everything the dashboard agent may do with more privilege than its own user. Nothing else.
-Defaults:mcagent !requiretty, !lecture, env_reset, timestamp_timeout=0
+# Must parse under both sudo-rs (Ubuntu 25.10+ default) and classic sudo: no regex, no
+# 'requiretty', and '*' only as the last argument ("any further arguments").
+Defaults:mcagent !lecture, env_reset, timestamp_timeout=0
 
 # Start/stop/restart the Minecraft service, and nothing else in systemd.
 mcagent ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft.service, /usr/bin/systemctl stop minecraft.service, /usr/bin/systemctl restart minecraft.service
 
-# Whitelist one player by offline UUID. The name must be a valid Minecraft name (regex needs sudo >= 1.9.10).
-mcagent ALL=(root) NOPASSWD: /usr/local/bin/mc-allow ^[A-Za-z0-9_]{3,16}$
+# Whitelist one player by offline UUID. The wrapper accepts exactly one valid name and never --op.
+mcagent ALL=(root) NOPASSWD: /usr/local/lib/mc-agent/allow-player *
 
 # File operations on the server folder, as the minecraft user. The helper re-validates every argument.
 mcagent ALL=(minecraft) NOPASSWD: /usr/bin/node /opt/mc-agent/helper/mc-agent-helper.mjs *
