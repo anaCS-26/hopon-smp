@@ -34,6 +34,34 @@ Background: [ADR 0001](adr/0001-dashboard-security-model.md),
 
 ---
 
+## Lessons from the first go-live (2026-11-08, on `mc-temp`)
+
+Read these before re-running the runbook (for example on the Arm VM):
+
+- **Ubuntu 26.04 uses sudo-rs as `sudo`.** Classic sudo is also installed, as `sudo.ws`.
+  - sudo-rs rejects `requiretty` and regex arguments.
+  - The agent's rules file now parses under both, and the installer checks it with every
+    `visudo` it finds.
+- **Tailscale has `resolute` (26.04) packages,** so the commands in 1b work unchanged.
+- **Copy only committed files to the VM.** Use `git archive` rather than `scp -r agent`, so no
+  local `.env.mock` goes up:
+  `git archive --format=tar.gz -o agent.tgz HEAD agent`, copy it with scp, then `tar -xzf` in `~`.
+- **SSH from Git Bash:** the Oracle key has a passphrase and lives in Windows' ssh-agent. Use
+  Windows' `C:\Windows\System32\OpenSSH\ssh.exe`, not Git Bash's `ssh`.
+- **Vercel:** the Vercel connection Claude had could read the team but not create projects or
+  change settings. So the owner did these in the website:
+  - importing the repo
+  - setting env vars
+  - adding domains
+  - redeploying
+
+  **The project name Vercel shows on import is what you get.** The repo was imported as
+  `hoponsmp`, so the live URL is `https://hoponsmp.vercel.app`, and `hopon-smp.vercel.app`
+  belongs to someone else. Check the Domains list right after import, before setting
+  `DASHBOARD_ORIGIN`, `DISCORD_REDIRECT_URI` or the Discord redirect.
+- **The Funnel host is kept out of the repo by design.** It isn't secret. It lives in Vercel's
+  `AGENT_URL` and in `/etc/mc-agent/agent.env` on the VM.
+
 ## Phase 0: get the code ready (AGENT)
 
 1. **Merge the dashboard work into the main branch.** It lives on branch
