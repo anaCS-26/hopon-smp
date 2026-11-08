@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-const FAKE_PLAYERS = ['Zbeast', 'PixelPanda', 'MossyMax', 'LavaLuna', 'CreeperCarl'];
+const FAKE_PLAYERS = ['Zbeast', 'Goatmoose', 'Taby', 'MossyMax', 'LavaLuna'];
 
 export function createMockSystem({ dataDir, speed = 1 } = {}) {
   const packs = path.join(dataDir, 'packs');
@@ -106,7 +106,7 @@ export function createMockSystem({ dataDir, speed = 1 } = {}) {
       else if (command.startsWith('weather')) say(`Changing to ${command.split(' ')[1]} weather`);
       else if (command.startsWith('gamerule')) say(`Gamerule ${command.split(' ')[1]} is now set to: ${command.split(' ')[2]}`);
       else if (command === 'save-all') say('Saved the game');
-      else if (command === 'whitelist list') say(`There are 3 whitelisted player(s): Zbeast, PixelPanda, MossyMax`);
+      else if (command === 'whitelist list') say(`There are 3 whitelisted player(s): Zbeast, Goatmoose, Taby`);
     },
     async readLog(lines = 200) {
       // Include a line with an IP and a /login so the dashboard's redaction is visible in dev.

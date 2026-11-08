@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { readSession, actorFor } from '@/lib/server/session';
 import { agentFetch } from '@/lib/server/agent';
-import { Frog, Avatar } from '@/components/pixel';
+import { CrewLogo, Avatar } from '@/components/pixel';
 import { MeProvider, NavLinks, type Me } from '@/components/me';
 import { Toasts, TitleTag } from '@/components/ui';
 
@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="shell" style={{ maxWidth: 620, paddingTop: '12vh' }}>
         <div className="panel" style={{ textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-            <Frog size={70} />
+            <CrewLogo size={110} />
           </div>
           <h1 className="page-title">AGENT OFFLINE</h1>
           <p className="page-sub" style={{ margin: '0 auto 18px' }}>
@@ -41,7 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="shell">
           <header className="topbar">
             <Link href="/" className="brand" aria-label="Hop On SMP home">
-              <Frog size={44} />
+              <CrewLogo size={58} />
               <span>
                 <span className="brand-name">
                   HOP <b>ON</b>

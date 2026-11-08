@@ -13,7 +13,17 @@ type Invite = { id: string; role: string; title: string; titleTier: string; note
 
 const FUN_TITLES = [
   'Creeper Whisperer', 'Professional Cave Explorer', 'Chief Dirt Hut Architect', 'Redstone Wizard', 'Lava Bucket Enthusiast',
-  'Diamond Hoarder', 'Village Mayor', 'Bed Explosion Survivor', 'Llama Diplomat', 'Nether Tourist', 'Certified Farmer', 'Frog Ambassador',
+  'Diamond Hoarder', 'Village Mayor', 'Bed Explosion Survivor', 'Llama Diplomat', 'Nether Tourist', 'Certified Farmer', 'Professional Hopper',
+];
+const PERMS: [string, boolean, boolean, boolean, boolean][] = [
+  ['See status, worlds, backups, guides', true, true, true, true],
+  ['Start the server, chat, join the queue', true, true, true, true],
+  ['Create worlds (members up to 3)', true, true, true, true],
+  ["Change a world's settings, mods, pack", false, true, true, true],
+  ['Stop / restart / switch away from the running world', false, true, true, true],
+  ['Reset, delete or restore a world', false, true, false, true],
+  ['Approve Minecraft names, read the Logbook', false, false, true, true],
+  ['Invite people, give titles and roles, turn off access', false, false, false, true],
 ];
 const TIERS = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 const ROLE_BADGE: Record<string, string> = { owner: 'warn', admin: 'epic', member: '' };
@@ -29,8 +39,29 @@ export default function CrewPage() {
 
   return (
     <>
-      <h1 className="page-title">THE CREW</h1>
-      <p className="page-sub">Everyone with dashboard access. To play, each person also needs their Minecraft name whitelisted. The Team Leader or an admin approves it.</p>
+      <section className="panel crew-poster">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/crew-banner-640.webp" alt="The Hop On crew poster" width={320} height={320} className="poster" />
+        <div>
+          <h1 className="page-title" style={{ marginTop: 0 }}>THE CREW</h1>
+          <p className="page-sub">
+            &ldquo;Hop on?&rdquo; is how we ask if anyone wants to play. This page is everyone with dashboard access. To play, each person also needs their Minecraft name approved by the Team Leader or an admin.
+          </p>
+          <h3>WHO CAN DO WHAT</h3>
+          <table className="plain">
+            <thead><tr><th /><th>MEMBER</th><th>WORLD HOST</th><th>ADMIN</th><th>TEAM LEADER</th></tr></thead>
+            <tbody>
+              {PERMS.map(([what, ...cols]) => (
+                <tr key={what}>
+                  <td>{what}</td>
+                  {cols.map((c, i) => <td key={i} style={{ color: c ? 'var(--moss)' : 'var(--ink-3)' }}>{c ? '✔' : '–'}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="small muted" style={{ marginBottom: 0 }}>A world&apos;s host is whoever created it. Every action is checked on the server and written to the Logbook.</p>
+        </div>
+      </section>
 
       {self && <McNameCard self={self} reload={reload} />}
 

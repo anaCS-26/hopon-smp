@@ -16,10 +16,17 @@ through the signed agent API (see [../agent](../agent) and
 | **Guides** | Joining, what mods are, installing mods with Prism or Fabric, shaders (Iris + Sodium), resource packs, safe vs unsafe download sites, troubleshooting |
 | **Logbook** | Audit log (admins + Team Leader) |
 
-**Design:** night-camp pixel theme, an original frog mascot, procedural pixel faces and world
-blocks, all drawn in CSS and SVG for this project. There are no Mojang assets. The three
-fonts are SIL OFL 1.1: Press Start 2P (headings), Pixelify Sans (text) and VT323 (console).
-`next/font` self-hosts them.
+**Design:**
+- **Theme:** night-camp pixel style.
+- **The crew's own artwork** in `public/brand/` (made for the group):
+  - The crew logo is used for the header and the favicon.
+  - The "HOP ON" poster is used on the login and Crew pages.
+- **Pixel faces and world blocks** are drawn in CSS and SVG for this project.
+- **No Mojang assets.**
+- **Fonts:** three SIL OFL 1.1 fonts, self-hosted by `next/font`:
+  - Press Start 2P (headings)
+  - Pixelify Sans (text)
+  - VT323 (console)
 
 ## Run locally (no VM, no Discord)
 

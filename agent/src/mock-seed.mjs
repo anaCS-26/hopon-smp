@@ -1,5 +1,5 @@
 // Fake crew, worlds and backups so the dashboard has something to show in mock mode.
-// Mock Discord ids 1000...0001-0004 can be picked on the dashboard's dev login screen.
+// Mock users (made-up Discord ids 1000...0001-0004; names follow the real crew for a realistic preview) can be picked on the dashboard's dev login screen.
 import { DEFAULT_SETTINGS } from './properties.mjs';
 
 const baseMods = (by) => [
@@ -21,9 +21,9 @@ export function seed(store, system) {
   const now = Date.now();
   const iso = (msAgo) => new Date(now - msAgo).toISOString();
   const users = [
-    ['u0leader00', '100000000000000001', 'Leader', 'owner', 'Team Leader', 'legendary', 'TeamLeader', 'whitelisted'],
-    ['u0zbeast00', '100000000000000002', 'Zbeast', 'admin', 'Redstone Wizard', 'epic', 'Zbeast', 'whitelisted'],
-    ['u0panda000', '100000000000000003', 'PixelPanda', 'member', 'Professional Cave Explorer', 'rare', 'PixelPanda', 'whitelisted'],
+    ['u0leader00', '100000000000000001', 'zbeast', 'owner', 'Team Leader', 'legendary', 'Zbeast', 'whitelisted'],
+    ['u0zbeast00', '100000000000000002', 'Goatmoose', 'admin', 'Mob Knockout Champion', 'epic', 'Goatmoose', 'whitelisted'],
+    ['u0panda000', '100000000000000003', 'Taby', 'member', 'Professional Hopper', 'rare', 'Taby', 'whitelisted'],
     ['u0mossy000', '100000000000000004', 'MossyMax', 'member', 'Chief Dirt Hut Architect', 'uncommon', 'MossyMax', 'pending'],
   ].map(([id, discordId, discordName, role, title, titleTier, mcName, mcStatus], i) => ({
     id, discordId, discordName, avatarUrl: null, role, title, titleTier, mcName, mcStatus, status: 'active', epoch: 1,
@@ -40,8 +40,8 @@ export function seed(store, system) {
     }
     s.worlds.push(
       {
-        id: 'wpanda01', name: 'Panda Skyblock', description: 'One tree, one island, zero mercy.', theme: 'end', hostId: 'u0panda000',
-        createdAt: iso(864e5 * 4), createdVersion: '26.3', lastPlayedVersion: '26.3', settings: { ...DEFAULT_SETTINGS, motd: 'Panda Skyblock', 'level-type': 'minecraft:flat', difficulty: 'hard' },
+        id: 'wpanda01', name: 'Taby Skyblock', description: 'One tree, one island, zero mercy.', theme: 'end', hostId: 'u0panda000',
+        createdAt: iso(864e5 * 4), createdVersion: '26.3', lastPlayedVersion: '26.3', settings: { ...DEFAULT_SETTINGS, motd: 'Taby Skyblock', 'level-type': 'minecraft:flat', difficulty: 'hard' },
         mods: [...baseMods('u0panda000'), mod('9eGKb6K1', 'universal-graves', 'Universal Graves', '3.9.0', 'optional', 'required', 'u0panda000')],
         resourcePack: null, status: 'ready', hasData: true, playMinutes: 190, lastActiveAt: iso(864e5 * 2),
       },

@@ -1,13 +1,12 @@
 import { redirect } from 'next/navigation';
-import { Frog } from '@/components/pixel';
 import { env } from '@/lib/server/env';
 import { readSession } from '@/lib/server/session';
 
 const MOCK_USERS = [
-  ['100000000000000001', 'Leader', 'Team Leader (owner)'],
-  ['100000000000000002', 'Zbeast', 'Redstone Wizard (admin)'],
-  ['100000000000000003', 'PixelPanda', 'Cave Explorer (member, hosts Panda Skyblock)'],
-  ['100000000000000004', 'MossyMax', 'Dirt Hut Architect (member)'],
+  ['100000000000000001', 'zbeast', 'Team Leader (owner)'],
+  ['100000000000000002', 'Goatmoose', 'Mob Knockout Champion (admin)'],
+  ['100000000000000003', 'Taby', 'Professional Hopper (member, hosts Taby Skyblock)'],
+  ['100000000000000004', 'MossyMax', 'Dirt Hut Architect (member, made-up)'],
   ['100000000000000099', 'Stranger', 'Not invited (should be refused)'],
 ];
 
@@ -18,14 +17,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   return (
     <main className="shell" style={{ maxWidth: 560, paddingTop: '10vh' }}>
-      <div className="panel" style={{ textAlign: 'center', padding: '34px 28px 30px' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-          <Frog size={88} />
-        </div>
-        <h1 className="brand-name" style={{ fontSize: 24, margin: '0 0 6px' }}>
-          HOP <b>ON</b>
+      <div className="panel" style={{ textAlign: 'center', padding: '14px 14px 26px' }}>
+        {/* The crew's own poster. Its "HOP ON" title doubles as the page heading. */}
+        <h1 style={{ margin: 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/crew-banner-640.webp" srcSet="/brand/crew-banner-640.webp 640w, /brand/crew-banner.webp 1254w" sizes="(max-width: 600px) 92vw, 512px"
+            alt="Hop On" width={512} height={512} className="poster" />
         </h1>
-        <p className="mono" style={{ color: 'var(--ink-3)', margin: '0 0 22px' }}>
+        <p className="mono" style={{ color: 'var(--ink-3)', margin: '14px 0 20px' }}>
           SMP CONTROL PANEL
         </p>
 

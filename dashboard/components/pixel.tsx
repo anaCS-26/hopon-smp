@@ -1,4 +1,4 @@
-// Original pixel art drawn as SVG rects: the Hop On frog, procedural player faces,
+// The crew logo, plus original pixel art drawn as SVG rects: procedural player faces,
 // world "blocks" and the hills backdrop. No game textures are used anywhere.
 
 type Grid = string[];
@@ -24,23 +24,10 @@ function PixelGrid({ grid, palette, size, title, className }: { grid: Grid; pale
   );
 }
 
-const FROG: Grid = [
-  '..kkk..kkk..',
-  '.kwwwkkwwwk.',
-  '.kwpwggwpwk.',
-  'kgwwwggwwwgk',
-  'kggggggggggk',
-  'kgrgkggkgrgk',
-  'kggggkkggggk',
-  '.kgllllllgk.',
-  'kdgllllllgdk',
-  'kddgkddkgddk',
-  '.kkk.kk.kkk.',
-];
-const FROG_PAL = { k: '#122010', w: '#ffffff', p: '#101010', g: '#6fd157', d: '#3c8a2e', l: '#c9f3a3', r: '#ff8f8f' };
-
-export function Frog({ size = 44, className = 'frog' }: { size?: number; className?: string }) {
-  return <PixelGrid grid={FROG} palette={FROG_PAL} size={size} className={className} title="Hop On frog" />;
+/** The crew logo (the group's own art, in public/brand). */
+export function CrewLogo({ size = 44, className = 'crew-logo' }: { size?: number; className?: string }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/brand/crew-logo.png" alt="Hop On crew logo" width={size} height={size} className={className} />;
 }
 
 // ---------------------------------------------------------------- procedural faces
