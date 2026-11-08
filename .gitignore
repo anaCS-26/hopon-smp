@@ -1,0 +1,32 @@
+# ---- Local settings, state and secrets (never commit) ----
+infra/oci/settings.json
+infra/oci/state.json
+.env
+*.env
+!*.example.env
+*.pem
+*.key
+id_*
+oracle_mc*
+
+# ---- Worlds, backups and big binaries ----
+worlds/
+backups/
+migration/
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.jar
+*.mca
+
+# ---- Logs and tooling ----
+logs/
+*.log
+.venv/
+__pycache__/
+node_modules/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

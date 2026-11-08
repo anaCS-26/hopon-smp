@@ -1,0 +1,12 @@
+[Unit]
+Description=Minecraft server console input (named pipe)
+# Created and removed together with the server, so commands can never queue up
+# while the server is stopped and then run on the next start.
+PartOf=minecraft.service
+
+[Socket]
+ListenFIFO=/run/minecraft.console
+SocketUser=minecraft
+SocketGroup=minecraft
+SocketMode=0660
+RemoveOnStop=true

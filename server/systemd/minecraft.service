@@ -1,0 +1,55 @@
+[Unit]
+Description=Minecraft Java server
+Wants=network-online.target
+After=network-online.target minecraft.socket
+Requires=minecraft.socket
+
+[Service]
+Type=simple
+User=minecraft
+Group=minecraft
+WorkingDirectory=/srv/minecraft/server
+
+# Console: commands go in through the named pipe (see mc-cmd), output goes to the journal.
+Sockets=minecraft.socket
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+
+# JVM flags live in jvm.args (written by setup-minecraft.sh).
+ExecStart=/usr/bin/java @jvm.args -jar server.jar nogui
+
+# Clean shutdown: ask the server to stop (it saves the world), then wait for it to exit.
+ExecStop=/bin/sh -c 'echo stop > /run/minecraft.console; while kill -0 $MAINPID 2>/dev/null; do sleep 1; done'
+TimeoutStopSec=180
+SuccessExitStatus=0 143
+
+# Crashes restart automatically. A deliberate "stop" (exit 0) does not.
+Restart=on-failure
+RestartSec=15
+
+# ---- Sandboxing: the server (and every mod it loads) can only write to /srv/minecraft ----
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/minecraft -/run/minecraft.console
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

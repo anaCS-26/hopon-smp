@@ -1,0 +1,16 @@
+[Unit]
+Description=Minecraft world backup (local)
+
+[Service]
+Type=oneshot
+User=minecraft
+Group=minecraft
+ExecStart=/usr/local/bin/mc-backup auto
+Nice=10
+IOSchedulingClass=idle
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/minecraft -/run/minecraft.console
+ProtectHome=true
+PrivateTmp=true

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Interactive server console over SSH: shows the live log and sends what you type.
+# Leave with Ctrl+C or Ctrl+D. The server keeps running.
+set -uo pipefail
+
+if ! systemctl is-active --quiet minecraft; then
+  echo "The minecraft service is not running. Start it with: sudo systemctl start minecraft" >&2
+  exit 1
+fi
+
+journalctl -u minecraft -f -n 30 -o cat &
+log_pid=$!
+trap 'kill "$log_pid" 2>/dev/null' EXIT INT TERM
+
+echo "--- Minecraft console. Type commands without a leading slash. Ctrl+C to leave. ---"
+while IFS= read -r -e line; do
+  [ -n "$line" ] && mc-cmd "$line"
+done

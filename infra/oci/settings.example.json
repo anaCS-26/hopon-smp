@@ -1,0 +1,11 @@
+{
+  "ociCli": "~/.oci-cli-venv/Scripts/oci.exe",
+  "ociConfigPath": "~/.oci/config",
+  "compartmentId": "ocid1.compartment.oc1..replace-me",
+  "adminCidr": "203.0.113.10/32",
+  "sshPublicKeyPath": "~/.ssh/oracle_mc.pub",
+  "ubuntuVersion": "26.04",
+  "ocpus": 2,
+  "memoryGb": 12,
+  "bootVolumeGb": 100
+}

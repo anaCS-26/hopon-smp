@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Send one command to the Minecraft server console.
+#   mc-cmd say Hello
+#   mc-cmd whitelist add SomeName
+# Requires membership of the 'minecraft' group (or sudo). Output appears in the
+# server log: journalctl -u minecraft -f   (or use mc-console).
+set -euo pipefail
+
+FIFO=/run/minecraft.console
+
+if [ $# -eq 0 ]; then
+  echo "usage: mc-cmd <minecraft command...>" >&2
+  exit 2
+fi
+if ! systemctl is-active --quiet minecraft; then
+  echo "mc-cmd: the minecraft service is not running" >&2
+  exit 1
+fi
+if [ ! -p "$FIFO" ]; then
+  echo "mc-cmd: console pipe $FIFO not found" >&2
+  exit 1
+fi
+
+printf '%s\n' "$*" > "$FIFO"

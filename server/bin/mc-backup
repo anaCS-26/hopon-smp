@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Consistent local backup of the world and the small config files that matter.
+#   mc-backup              -> tag "manual"
+#   mc-backup auto         -> used by the 6-hourly timer
+#   mc-backup pre-migrate  -> any tag you like
+#
+# While the server runs: autosave is paused, the world is flushed to disk and the
+# save is confirmed in the log before archiving; autosave is always re-enabled.
+# Only "auto" backups are pruned (newest $KEEP kept). Every other tag is kept forever.
+set -euo pipefail
+
+SERVER_DIR=/srv/minecraft/server
+BACKUP_DIR=/srv/minecraft/backups
+KEEP="${KEEP:-28}"            # 28 x 6 h = one week of automatic backups
+TAG="${1:-manual}"
+SAVE_TIMEOUT=120
+
+case "$TAG" in *[!A-Za-z0-9_-]*|"") echo "mc-backup: tag must be letters, digits, - or _" >&2; exit 2 ;; esac
+
+mkdir -p "$BACKUP_DIR"
+exec 9>"$BACKUP_DIR/.lock"
+if ! flock -n 9; then
+  echo "mc-backup: another backup is already running" >&2
+  exit 0
+fi
+
+cd "$SERVER_DIR"
+LEVEL="$(grep -m1 '^level-name=' server.properties 2>/dev/null | cut -d= -f2- || true)"
+LEVEL="${LEVEL:-world}"
+
+if [ ! -d "$LEVEL" ]; then
+  echo "mc-backup: no world folder '$LEVEL' yet, nothing to back up"
+  exit 0
+fi
+
+# What to archive: the world (plus Paper-style split dimensions) and small server state.
+items=()
+for p in "$LEVEL" "${LEVEL}_nether" "${LEVEL}_the_end" \
+         server.properties whitelist.json ops.json banned-players.json banned-ips.json \
+         usercache.json config EasyAuth; do
+  [ -e "$p" ] && items+=("$p")
+done
+
+if systemctl is-active --quiet minecraft; then
+  LOG="$SERVER_DIR/logs/latest.log"
+  start_line=$(( $(wc -l < "$LOG" 2>/dev/null || echo 0) + 1 ))
+  mc-cmd "save-off"
+  trap 'mc-cmd "save-on" >/dev/null 2>&1 || true' EXIT
+  mc-cmd "save-all flush"
+  saved=false
+  for _ in $(seq 1 "$SAVE_TIMEOUT"); do
+    if tail -n +"$start_line" "$LOG" 2>/dev/null | grep -q 'Saved the game'; then saved=true; break; fi
+    sleep 1
+  done
+  if ! $saved; then
+    echo "mc-backup: the server did not confirm the save within ${SAVE_TIMEOUT}s; aborting" >&2
+    exit 1
+  fi
+fi
+
+stamp="$(date -u +%Y%m%d-%H%M%SZ)"
+out="$BACKUP_DIR/${LEVEL}-${stamp}-${TAG}.tar.gz"
+tar -czf "$out.partial" "${items[@]}"
+mv "$out.partial" "$out"
+echo "mc-backup: wrote $out ($(du -h "$out" | cut -f1))"
+
+# Prune old automatic backups only.
+mapfile -t old < <(ls -1t "$BACKUP_DIR"/*-auto.tar.gz 2>/dev/null | tail -n +$((KEEP + 1)))
+if [ "${#old[@]}" -gt 0 ]; then
+  rm -f -- "${old[@]}"
+  echo "mc-backup: pruned ${#old[@]} old automatic backup(s)"
+fi

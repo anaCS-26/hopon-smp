@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up the Minecraft world every 6 hours
+
+[Timer]
+# 00:00, 06:00, 12:00, 18:00 UTC. The server keeps running during backups.
+OnCalendar=*-*-* 00/6:00:00 UTC
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
