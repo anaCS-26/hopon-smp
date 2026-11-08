@@ -267,4 +267,6 @@ test('log redaction hides IPs and auth command arguments', () => {
   assert.match(redactLogLine('Zbeast issued server command: /login hunter2'), /\/login ‹hidden›$/);
   assert.match(redactLogLine('Bob issued server command: /register pw pw'), /\/register ‹hidden›$/);
   assert.doesNotMatch(redactLogLine('[2001:db8::1]:25565 connected'), /2001/);
+  assert.equal(redactLogLine('[20:41:13] [Server thread/INFO]: Done (4.2s)!'), '[20:41:13] [Server thread/INFO]: Done (4.2s)!');
+  assert.equal(redactLogLine('[2001:0:0:0:0:0:0:1] x'), '‹ip› x');
 });

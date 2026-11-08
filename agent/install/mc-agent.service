@@ -1,0 +1,48 @@
+[Unit]
+Description=Hop On SMP dashboard agent (allowlisted control API on 127.0.0.1)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=mcagent
+Group=mcagent
+# Read-only access to logs and backups, and write access to the console pipe (mc-cmd).
+SupplementaryGroups=minecraft
+WorkingDirectory=/opt/mc-agent
+# Non-secret settings.
+EnvironmentFile=/etc/mc-agent/agent.env
+# Secrets: root-owned 0600 files, handed to this service only (never in the environment).
+LoadCredential=hmac-keys:/etc/mc-agent/hmac-keys
+LoadCredential=discord-webhook:/etc/mc-agent/discord-webhook
+ExecStart=/usr/bin/node /opt/mc-agent/src/main.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0027
+
+# ---- Sandboxing ----
+# The agent escalates ONLY through the exact sudo rules in /etc/sudoers.d/mc-agent. sudo is
+# setuid, so NoNewPrivileges/RestrictSUIDSGID/CapabilityBoundingSet can't be used here.
+# Children started through sudo inherit this filesystem view, hence /srv/minecraft below.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/mc-agent /srv/minecraft -/run/minecraft.console -/run/sudo
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+# Stay small next to Minecraft on a 1-2 OCPU VM.
+MemoryMax=256M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target

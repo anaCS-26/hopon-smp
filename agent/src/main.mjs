@@ -71,6 +71,19 @@ if (!mcVersion && !mock) {
   mcVersion = (/^mc_version=(.+)$/m.exec(st) || [])[1] || null;
 }
 
+if (!mock) {
+  for (const k of ['AGENT_PUBLIC_URL', 'DASHBOARD_ORIGIN', 'OWNER_DISCORD_ID']) {
+    if (!env[k] || env[k].includes('REPLACE')) {
+      console.error(`Set ${k} in /etc/mc-agent/agent.env (see agent/install/agent.env.example).`);
+      process.exit(1);
+    }
+  }
+  if (!/^https:\/\//.test(env.AGENT_PUBLIC_URL)) {
+    console.error('AGENT_PUBLIC_URL must be https:// (the Tailscale Funnel URL).');
+    process.exit(1);
+  }
+}
+
 const config = {
   mode: mock ? 'mock' : 'real',
   publicUrl: env.AGENT_PUBLIC_URL || `http://127.0.0.1:${port}`,

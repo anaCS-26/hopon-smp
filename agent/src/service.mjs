@@ -946,7 +946,8 @@ export function createService({ store, system, modrinth, config, notify = async 
 export function redactLogLine(line) {
   return String(line)
     .replace(/\b(\d{1,3}\.){3}\d{1,3}(:\d+)?\b/g, '‹ip›')
-    .replace(/\[[0-9a-fA-F:]{6,}\](:\d+)?/g, '‹ip›')
+    // IPv6 in brackets: needs "::", a hex letter, or 4+ colons, so log times like [20:41:13] survive.
+    .replace(/\[(?=[0-9a-fA-F:]*(?:::|[a-fA-F]|(?::[0-9a-fA-F]*){4}))[0-9a-fA-F:]{3,}\](:\d+)?/g, '‹ip›')
     .replace(/(\/(?:login|l|register|reg|changepassword|changepw|account)\b)[^\n]*/gi, '$1 ‹hidden›')
     .slice(0, 600);
 }

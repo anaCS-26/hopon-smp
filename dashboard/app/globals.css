@@ -122,8 +122,10 @@ hr { border: 0; height: 4px; background: var(--edge); box-shadow: 0 4px 0 var(--
 .grid { display: grid; gap: 18px; }
 .grid.two { grid-template-columns: 1.35fr 1fr; }
 .grid.three { grid-template-columns: repeat(3, 1fr); }
-.grid.cards { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
-@media (max-width: 900px) { .grid.two, .grid.three { grid-template-columns: 1fr; } .nav { margin-left: 0; } }
+.grid.cards { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+.grid.side { grid-template-columns: 260px 1fr; align-items: start; }
+.toc { position: sticky; top: 14px; }
+@media (max-width: 900px) { .grid.two, .grid.three, .grid.side { grid-template-columns: 1fr; } .toc { position: static; } .nav { margin-left: 0; } }
 
 /* ------------------------------------------------------------ panels ("blocks") */
 .panel {
@@ -176,7 +178,7 @@ label.field > span { display: block; font-size: 15px; color: var(--ink-2); margi
 }
 .input:focus { outline: 3px solid var(--torch); outline-offset: 0; }
 .input.mono { font-family: var(--font-mono); font-size: 22px; }
-.check { display: flex; gap: 10px; align-items: center; cursor: pointer; }
+label.check, .check { display: flex; gap: 10px; align-items: center; cursor: pointer; }
 .check input { appearance: none; width: 22px; height: 22px; background: var(--sky-0); box-shadow: inset 3px 3px 0 var(--edge), inset -3px -3px 0 var(--stone-2); margin: 0; cursor: pointer; flex: none; }
 .check input:checked { background: var(--moss); box-shadow: inset 3px 3px 0 var(--moss-d), inset -3px -3px 0 var(--moss-l); }
 .check input:checked::after { content: ''; display: block; width: 6px; height: 6px; background: #0d1f08; margin: 8px; }
