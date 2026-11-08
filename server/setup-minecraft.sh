@@ -160,7 +160,8 @@ if [ -n "$ADMIN_USER" ] && [ "$ADMIN_USER" != "root" ]; then
 fi
 
 log "Installing helper commands and systemd units"
-install -m 0755 "$SCRIPT_DIR/bin/mc-cmd" "$SCRIPT_DIR/bin/mc-console" "$SCRIPT_DIR/bin/mc-backup" /usr/local/bin/
+install -m 0755 "$SCRIPT_DIR/bin/mc-cmd" "$SCRIPT_DIR/bin/mc-console" "$SCRIPT_DIR/bin/mc-backup" \
+  "$SCRIPT_DIR/bin/mc-allow" /usr/local/bin/
 install -m 0644 "$SCRIPT_DIR/systemd/minecraft.service" "$SCRIPT_DIR/systemd/minecraft.socket" \
   "$SCRIPT_DIR/systemd/minecraft-backup.service" "$SCRIPT_DIR/systemd/minecraft-backup.timer" /etc/systemd/system/
 systemctl daemon-reload
