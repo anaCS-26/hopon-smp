@@ -1,0 +1,12 @@
+# /etc/sudoers.d/mc-agent  (root:root 0440, checked with visudo -cf before install)
+# Everything the dashboard agent may do with more privilege than its own user. Nothing else.
+Defaults:mcagent !requiretty, !lecture, env_reset, timestamp_timeout=0
+
+# Start/stop/restart the Minecraft service, and nothing else in systemd.
+mcagent ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft.service, /usr/bin/systemctl stop minecraft.service, /usr/bin/systemctl restart minecraft.service
+
+# Whitelist one player by offline UUID. The name must be a valid Minecraft name (regex needs sudo >= 1.9.10).
+mcagent ALL=(root) NOPASSWD: /usr/local/bin/mc-allow ^[A-Za-z0-9_]{3,16}$
+
+# File operations on the server folder, as the minecraft user. The helper re-validates every argument.
+mcagent ALL=(minecraft) NOPASSWD: /usr/bin/node /opt/mc-agent/helper/mc-agent-helper.mjs *

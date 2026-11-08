@@ -1,0 +1,16 @@
+{
+  "name": "hopon-mc-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Small allowlisted control API for the Hop On SMP Minecraft server. Zero runtime dependencies.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "start": "node src/main.mjs",
+    "mock": "node src/main.mjs --mock",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "license": "MIT"
+}

@@ -37,7 +37,23 @@ Admin   ──SSH 22 (single IP, temporary)────────────�
 infra/oci/
   provision.ps1           Create or update the network and VM (idempotent, has a dry-run mode)
   settings.example.json   Template for settings.json (git-ignored: IDs and admin IP)
+server/                   Minecraft install script, systemd units, helper commands (mc-cmd, mc-backup...)
+agent/                    mc-agent: the VM's small allowlisted control API (zero dependencies), installer, tests
+dashboard/                The Hop On SMP web dashboard (Next.js, for Vercel)
+docs/adr/                 Architecture decisions: security model, login, worlds
 ```
+
+## Dashboard
+
+A Minecraft-themed control panel for the crew: start/stop, worlds with hosts, a Modrinth mod
+shop, resource packs, backups, a safe console, fun titles and step-by-step guides. The
+dashboard (Vercel) reaches the VM only through `mc-agent`, a signed, allowlisted API published
+with Tailscale Funnel. There is no shell access and no open port. Read
+[ADR 0001](docs/adr/0001-dashboard-security-model.md) first.
+
+- Run it locally with a pretend server: [dashboard/README.md](dashboard/README.md#run-locally-no-vm-no-discord)
+- Install the agent on the VM: [agent/README.md](agent/README.md#install-on-the-vm)
+- Deploy to Vercel: [dashboard/README.md](dashboard/README.md#deploy-to-vercel)
 
 ## Provisioning
 
@@ -67,5 +83,5 @@ The server's IP is never committed.
 3. Migrate the existing world and verify with players
 4. Backups: frequent on-VM snapshots, plus daily encrypted off-site copies to Google Drive
 5. Tailscale for admin access; close public SSH
-6. Dashboard: status, start/stop, console, backups; then worlds, resource packs and roles
+6. Dashboard: status, start/stop, console, backups, worlds, mods, resource packs and roles (built and tested locally; not deployed yet)
 7. Maybe: an MCP server so an AI assistant can drive the same dashboard API

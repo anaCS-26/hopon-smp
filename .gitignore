@@ -4,6 +4,13 @@ infra/oci/state.json
 .env
 *.env
 !*.example.env
+.env.*
+!.env.*.example
+!.env.example
+.vercel/
+.next/
+next-env.d.ts
+*.tsbuildinfo
 *.pem
 *.key
 id_*
