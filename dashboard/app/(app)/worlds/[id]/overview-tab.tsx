@@ -1,13 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { useRef, useCallback } from 'react';
-import { api, useAgent } from '@/lib/client/api';
+import { api, useAgent, statusPace } from '@/lib/client/api';
 import { useAction, useJobWatcher } from '@/components/ui';
 import type { World } from '../types';
 import type { Status } from '../../base-camp';
 
 export function OverviewTab({ w, reload }: { w: World; reload: () => void }) {
-  const { data: s } = useAgent<Status>('status', 3000);
+  const { data: s } = useAgent<Status>('status', statusPace);
   const { busy, run } = useAction();
   const { watch, watching } = useJobWatcher(useCallbackOnce(reload));
   const clientMods = w.mods.filter((m) => m.clientSide === 'required');

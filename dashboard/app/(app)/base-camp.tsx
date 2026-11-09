@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
-import { api, useAgent, timeAgo, duration, bytes } from '@/lib/client/api';
+import { api, useAgent, statusPace, timeAgo, duration, bytes } from '@/lib/client/api';
 import { Avatar, WorldBlock, PixelFace } from '@/components/pixel';
 import { CopyButton, TitleTag, useAction, Modal } from '@/components/ui';
 import { useMe } from '@/components/me';
@@ -32,8 +32,8 @@ const ACTIVITY: Record<string, string> = {
 
 export default function BaseCamp() {
   const me = useMe();
-  const { data: s, error, reload } = useAgent<Status>('status', 3000);
-  const { data: activity } = useAgent<{ entries: any[] }>('activity', 15000);
+  const { data: s, error, reload } = useAgent<Status>('status', statusPace);
+  const { data: activity } = useAgent<{ entries: any[] }>('activity', 30000);
   const { busy, run } = useAction();
 
   if (error && !s) return <div className="notice danger"><p>{error}</p></div>;
