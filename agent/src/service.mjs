@@ -606,9 +606,11 @@ export function createService({ store, system, modrinth, config, notify = async 
     return { world: publicWorld(w, user), restartNeeded: active };
   }
 
-  function activateWorld(user, id) {
+  async function activateWorld(user, id) {
     const w = worldOr404(id);
-    const p = statusCache?.players?.online ?? 0;
+    // Ask the server itself: the status cache is only as fresh as the last dashboard poll
+    // (and is cleared after every job), so it can say "nobody online" while people are playing.
+    const p = (await system.ping().catch(() => null))?.online ?? 0;
     authorize(user, 'world.activate', { world: w, playersOnline: p });
     if (w.status !== 'ready') throw new HttpError(409, `${w.name} is still being set up`);
     checkStartableMods(w);

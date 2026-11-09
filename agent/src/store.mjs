@@ -15,8 +15,10 @@ export const EMPTY_STATE = () => ({
 
 export class Store {
   /** dir = null keeps everything in memory (tests). */
-  constructor(dir) {
+  constructor(dir, { maxAuditBytes = 5 * 1024 * 1024 } = {}) {
     this.dir = dir;
+    this.maxAuditBytes = maxAuditBytes;
+    this.auditWrites = 0;
     this.file = dir ? path.join(dir, 'state.json') : null;
     this.auditFile = dir ? path.join(dir, 'audit.jsonl') : null;
     this.memAudit = [];
@@ -62,9 +64,21 @@ export class Store {
 
   audit(entry) {
     const line = { ts: new Date().toISOString(), ...entry };
-    if (this.auditFile) fs.appendFileSync(this.auditFile, JSON.stringify(line) + '\n', { mode: 0o600 });
-    else this.memAudit.push(line);
+    if (this.auditFile) {
+      this.rotateAudit();
+      fs.appendFileSync(this.auditFile, JSON.stringify(line) + '\n', { mode: 0o600 });
+    } else this.memAudit.push(line);
     return line;
+  }
+
+  /** Keep the audit log bounded: past the limit, the file becomes audit.jsonl.1 (one old copy kept). */
+  rotateAudit() {
+    if (this.auditWrites++ % 50 !== 0) return; // checking the size on every write is wasteful
+    try {
+      if (fs.statSync(this.auditFile).size > this.maxAuditBytes) fs.renameSync(this.auditFile, `${this.auditFile}.1`);
+    } catch {
+      /* no file yet */
+    }
   }
 
   /** Most recent audit entries, newest first. Reads only the tail of the file. */

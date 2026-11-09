@@ -270,3 +270,17 @@ test('log redaction hides IPs and auth command arguments', () => {
   assert.equal(redactLogLine('[20:41:13] [Server thread/INFO]: Done (4.2s)!'), '[20:41:13] [Server thread/INFO]: Done (4.2s)!');
   assert.equal(redactLogLine('[2001:0:0:0:0:0:0:1] x'), '‹ip› x');
 });
+
+test('store: the audit log rotates once it passes its size limit', async () => {
+  const { Store } = await import('../src/store.mjs');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hopon-audit-'));
+  const store = new Store(dir, { maxAuditBytes: 2000 });
+  for (let i = 0; i < 120; i++) store.audit({ actor: 'u1', action: 'test', n: i });
+  assert.ok(fs.existsSync(path.join(dir, 'audit.jsonl.1')), 'old log kept as .1');
+  assert.ok(fs.statSync(path.join(dir, 'audit.jsonl')).size < 6000, 'live log stays small');
+  assert.equal(store.readAudit(1)[0].n, 119, 'newest entry is still readable');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
