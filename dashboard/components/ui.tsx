@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '@/lib/client/api';
 
 // ---------------------------------------------------------------- toasts
@@ -51,58 +52,62 @@ export function useAction() {
   return { busy, run };
 }
 
+// ---------------------------------------------------------------- dialogs
+/** Dialogs render into <body>: a .panel's clip-path would otherwise clip a dialog opened inside it. */
+function DialogShell({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onClose]);
+  return createPortal(
+    <div className="modal-back" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="panel raised modal" onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ---------------------------------------------------------------- confirm by typing
 export function TypeToConfirm({ word, action, danger = true, onConfirm, onClose, children }: {
   word: string; action: string; danger?: boolean; onConfirm: (typed: string) => void; onClose: () => void; children?: React.ReactNode;
 }) {
   const [typed, setTyped] = useState('');
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', k);
-    return () => window.removeEventListener('keydown', k);
-  }, [onClose]);
   return (
-    <div className="modal-back" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="panel raised modal" onClick={(e) => e.stopPropagation()}>
-        <h2>{action}</h2>
-        {children}
-        <label className="field">
-          <span>
-            Type <strong style={{ color: 'var(--gold)' }}>{word}</strong> to confirm
-          </span>
-          <input className="input" autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
-        </label>
-        <div className="btn-row">
-          <button className={`btn ${danger ? 'danger' : 'warn'}`} disabled={typed.trim() !== word} onClick={() => onConfirm(typed.trim())}>
-            {action}
-          </button>
-          <button className="btn ghost" onClick={onClose}>
-            Cancel
-          </button>
-        </div>
+    <DialogShell onClose={onClose}>
+      <h2>{action}</h2>
+      {children}
+      <label className="field">
+        <span>
+          Type <strong style={{ color: 'var(--gold)' }}>{word}</strong> to confirm
+        </span>
+        <input className="input" autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+      </label>
+      <div className="btn-row">
+        <button className={`btn ${danger ? 'danger' : 'warn'}`} disabled={typed.trim() !== word} onClick={() => onConfirm(typed.trim())}>
+          {action}
+        </button>
+        <button className="btn ghost" onClick={onClose}>
+          Cancel
+        </button>
       </div>
-    </div>
+    </DialogShell>
   );
 }
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', k);
-    return () => window.removeEventListener('keydown', k);
-  }, [onClose]);
   return (
-    <div className="modal-back" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="panel raised modal" onClick={(e) => e.stopPropagation()}>
-        <div className="panel-head">
-          <h2>{title}</h2>
-          <button className="btn ghost sm" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </div>
-        {children}
+    <DialogShell onClose={onClose}>
+      <div className="panel-head">
+        <h2>{title}</h2>
+        <button className="btn ghost sm" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
       </div>
-    </div>
+      {children}
+    </DialogShell>
   );
 }
 
