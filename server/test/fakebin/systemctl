@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Stand-in for systemctl in tests: the Minecraft service is never running.
+exit 3

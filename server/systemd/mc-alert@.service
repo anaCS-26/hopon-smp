@@ -1,0 +1,23 @@
+[Unit]
+Description=Discord alert: %i failed
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# A throwaway user: it only needs the webhook URL (as a credential) and its own tiny state folder.
+DynamicUser=yes
+StateDirectory=mc-alert
+LoadCredential=discord-webhook:/etc/mc-agent/discord-webhook
+ExecStart=/usr/local/bin/mc-alert %i
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+CapabilityBoundingSet=

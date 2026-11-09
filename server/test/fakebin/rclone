@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Stand-in for rclone: the "mc-offsite:" remote is the folder $FAKE_REMOTE.
+set -euo pipefail
+sub="$1"; shift
+case "$sub" in
+  listremotes) sed -n 's/^\[\(.*\)\]$/\1:/p' "$RCLONE_CONFIG" ;;
+  config) [ "$1" = show ] && awk -v s="[$2]" '$0==s{f=1;next} /^\[/{f=0} f' "$RCLONE_CONFIG" ;;
+  obscure) printf 'OBSCURED-%s\n' "$(cat | wc -c)" ;;
+  mkdir) mkdir -p "$FAKE_REMOTE" ;;
+  lsf)
+    [ "${FAKE_LSF_FAIL:-}" = 1 ] && exit 3
+    for f in "$FAKE_REMOTE"/*; do [ -f "$f" ] && printf '%s\t%s\n' "$(stat -c %s "$f")" "$(basename "$f")"; done; true ;;
+  copy)
+    src="$1"; dst="$2"
+    if [[ "$dst" == mc-offsite:* ]]; then
+      t="$FAKE_REMOTE/$(basename "$src")"
+      if [ "${FAKE_TRUNCATE:-}" = 1 ]; then head -c 10 "$src" > "$t"; else [ -f "$t" ] || cp -p "$src" "$t"; fi
+    else
+      f="$FAKE_REMOTE/${src#mc-offsite:}"; [ -f "$f" ] && cp "$f" "$dst"; true
+    fi ;;
+  deletefile) rm -- "$FAKE_REMOTE/${1#mc-offsite:}" ;;
+  *) echo "fake rclone: unsupported $sub" >&2; exit 9 ;;
+esac

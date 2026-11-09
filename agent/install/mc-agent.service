@@ -2,6 +2,8 @@
 Description=Hop On SMP dashboard agent (allowlisted control API on 127.0.0.1)
 Wants=network-online.target
 After=network-online.target
+# Posts to Discord if the agent gives up restarting (mc-alert@.service is installed by server/).
+OnFailure=mc-alert@%n.service
 
 [Service]
 Type=simple

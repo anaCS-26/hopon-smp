@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Post a short alert to the crew's Discord channel. systemd runs this when a unit fails
+# (mc-alert@.service); it can also be run by hand to test the webhook:
+#   sudo systemctl start mc-alert@test.service
+#
+# The webhook URL is the same one the dashboard agent uses: /etc/mc-agent/discord-webhook
+# (root 0600, handed to this script as a systemd credential). An empty file means "off".
+# At most one alert per unit every 30 minutes, so a crash loop cannot flood the channel.
+set -euo pipefail
+
+what="${1:-}"
+[[ "$what" =~ ^[A-Za-z0-9@._-]{1,64}$ ]] || { echo "usage: mc-alert <unit name>" >&2; exit 2; }
+
+file="${CREDENTIALS_DIRECTORY:-/etc/mc-agent}/discord-webhook"
+url="$(tr -d '[:space:]' < "$file" 2>/dev/null || true)"
+if [ -z "$url" ]; then
+  echo "mc-alert: $what failed, but no Discord webhook is set in /etc/mc-agent/discord-webhook"
+  exit 0
+fi
+[[ "$url" =~ ^https://(discord\.com|discordapp\.com)/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$ ]] \
+  || { echo "mc-alert: /etc/mc-agent/discord-webhook does not hold a Discord webhook URL" >&2; exit 1; }
+
+if [ -n "${STATE_DIRECTORY:-}" ]; then
+  mark="$STATE_DIRECTORY/$what.last"
+  if [ -n "$(find "$mark" -mmin -30 2>/dev/null)" ]; then
+    echo "mc-alert: already alerted about $what in the last 30 minutes"
+    exit 0
+  fi
+  : > "$mark"
+fi
+
+case "$what" in
+  minecraft.service)         msg="🔴 The Minecraft server crashed. It restarts by itself in a few seconds; if it keeps happening, check the last mod or setting that changed." ;;
+  minecraft-backup.service)  msg="⚠️ A world backup failed (often a full disk). The world itself is fine, but check it soon." ;;
+  minecraft-offsite.service) msg="⚠️ The off-site (Google Drive) backup failed. Local backups still work; it retries tomorrow." ;;
+  mc-agent.service)          msg="⚠️ The dashboard agent stopped working. The game server is not affected." ;;
+  test)                      msg="✅ Test alert: server alerts are working." ;;
+  *)                         msg="⚠️ $what failed on the server." ;;
+esac
+
+# The messages above contain no quotes or backslashes, so this is valid JSON as it stands.
+# The URL goes in through stdin so it never shows up in the process list.
+printf 'url = "%s"\n' "$url" | curl -fsS -m 10 -K - \
+  -H 'content-type: application/json' \
+  -d "{\"content\":\"$msg\",\"allowed_mentions\":{\"parse\":[]}}" >/dev/null
+echo "mc-alert: posted an alert about $what"

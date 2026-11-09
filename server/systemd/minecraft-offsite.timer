@@ -1,0 +1,11 @@
+[Unit]
+Description=Copy the newest Minecraft backup off-site once a day
+
+[Timer]
+# 06:30 UTC (about 01:30 in Toronto), just after the 06:00 local backup.
+OnCalendar=*-*-* 06:30:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
