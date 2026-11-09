@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent:
+    name: Agent tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Zero dependencies, so there is nothing to install.
+      - run: npm test
+
+  dashboard:
+    name: Dashboard typecheck, tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  server:
+    name: Server scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax
+        run: |
+          for f in server/*.sh server/bin/* server/test/*.sh agent/install/*.sh; do
+            bash -n "$f" || exit 1
+          done
+      - name: No Windows line endings in files that run on the VM
+        run: |
+          if grep -rlI $'\r' server agent/install agent/src agent/helper; then
+            echo "The files above have CRLF line endings; check .gitattributes." >&2
+            exit 1
+          fi
+      - name: ShellCheck (errors only)
+        run: shellcheck --severity=error server/*.sh server/bin/* agent/install/*.sh
+      - name: Backup and off-site backup tests
+        run: |
+          bash server/test/mc-backup.test.sh
+          bash server/test/mc-offsite.test.sh
+      - name: systemd units parse
+        run: |
+          dir="$(mktemp -d)"
+          cp server/systemd/* agent/install/mc-agent.service "$dir/"
+          chmod 0644 "$dir"/*
+          cd "$dir"
+          out="$(systemd-analyze verify ./*.service 'mc-alert@test.service' 2>&1 || true)"
+          echo "$out"
+          # Missing binaries and users are expected on a CI machine; syntax problems are not.
+          if echo "$out" | grep -E "minecraft|mc-agent|mc-alert" | grep -iE "unknown (key|section|lvalue)|invalid|failed to parse|missing '='"; then
+            exit 1
+          fi
