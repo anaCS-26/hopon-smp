@@ -66,6 +66,19 @@ ok "pre-migrate and world manual backups kept forever" '[ "$(count pre-migrate)"
 ok "stale partial file removed" '[ "$(count partial)" -eq 0 ]'
 ok "trash: old items emptied by the date in their name" '[ "$(ls "$MC_TRASH_DIR" | tr "\n" " ")" = "hopon-reset-$T3-a1b2c3 keepme " ]'
 
+# Running server: the save must be confirmed in the log, including across the midnight log switch.
+mkdir -p "$MC_SERVER_DIR/logs"; for i in $(seq 1 50); do echo "old line $i"; done > "$MC_SERVER_DIR/logs/latest.log"
+n="$(count manual)"; sleep 1.1
+out="$(FAKE_ACTIVE=1 bash "$SUT" 2>&1)"; rc=$?
+ok "running server: backup made once the save is confirmed" '[ $rc -eq 0 ] && [ "$(count manual)" -eq $((n + 1)) ]'
+ok "running server: autosave turned back on" 'tail -n1 "$MC_SERVER_DIR/logs/latest.log" | grep -q "now enabled"'
+n="$(count manual)"; sleep 1.1
+out="$(FAKE_ACTIVE=1 FAKE_ROTATE=1 bash "$SUT" 2>&1)"; rc=$?
+ok "log replaced mid-backup (midnight): save still confirmed" '[ $rc -eq 0 ] && [ "$(count manual)" -eq $((n + 1)) ]'
+n="$(count manual)"
+out="$(FAKE_ACTIVE=1 FAKE_NO_SAVE=1 SAVE_TIMEOUT=2 bash "$SUT" 2>&1)"; rc=$?
+ok "save never confirmed: fails, writes nothing, autosave back on" '[ $rc -eq 1 ] && [ "$(count manual)" -eq "$n" ] && tail -n1 "$MC_SERVER_DIR/logs/latest.log" | grep -q "now enabled"'
+
 out="$(KEEP_RECENT=0 bash "$SUT" auto 2>&1)"; rc=$?
 ok "KEEP_RECENT=0 rejected" '[ $rc -eq 2 ]'
 
