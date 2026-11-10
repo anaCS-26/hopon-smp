@@ -286,8 +286,16 @@ test('the running world cannot be deleted; switching works and protects EasyAuth
   const j = await waitJob();
   assert.equal(j.ok, false);
   assert.match(j.error, /EasyAuth/);
+  // People are playing on someone else's world: a member may not switch, even when nobody has
+  // had the dashboard open (so no cached status exists). The agent asks the server itself.
+  const realPing = system.ping;
+  system.ping = async () => ({ online: 2, max: 10, sample: ['a', 'b'] });
+  const blocked = await call('POST', `/v1/worlds/${users.memberWorld}/activate`, { as: users.member });
+  system.ping = realPing;
+  assert.equal(blocked.status, 403, JSON.stringify(blocked.body));
+  assert.match(blocked.body.error, /queue/);
   // The member switches to their own world (nobody online).
-  const sw = await call('POST', `/v1/worlds/${users.memberWorld}/activate`, { as: users.member });
+  const sw =await call('POST', `/v1/worlds/${users.memberWorld}/activate`, { as: users.member });
   assert.equal(sw.status, 202, JSON.stringify(sw.body));
   const done = await waitJob();
   assert.equal(done.ok, true, done.error);

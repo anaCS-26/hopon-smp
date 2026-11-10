@@ -22,8 +22,12 @@
 #   * Opens TCP 25565 in the VM firewall, above Oracle's default REJECT rule
 #   * A locked-down 'minecraft' system user (no sudo, no login); server in /srv/minecraft/server
 #   * Downloads the server and mods, verifying published checksums
-#   * systemd: sandboxed server service, console pipe, 6-hourly local backup timer
-#   * Helpers in /usr/local/bin: mc-cmd, mc-console, mc-backup
+#   * systemd: sandboxed server service, console pipe, 6-hourly local backup timer,
+#     daily encrypted off-site copy (install-offsite.sh; needs docs/offsite-backups.md once)
+#   * Helpers in /usr/local/bin: mc-cmd, mc-console, mc-backup, mc-allow, mc-offsite, mc-alert
+#     (install-helpers.sh; run that alone to update them on a live server)
+#   * Discord alerts when the server crashes or a backup fails, once a webhook URL is in
+#     /etc/mc-agent/discord-webhook
 #
 # Guardrails (safe to re-run)
 #   * Never modifies the world folder. Takes a "pre-setup" backup if a world exists.
@@ -83,8 +87,8 @@ ADMIN_USER="${SUDO_USER:-}"
 [ -n "$MC_VERSION" ] || die "Set MC_VERSION, e.g. MC_VERSION=26.3"
 case "$SOFTWARE" in fabric|paper|vanilla) ;; *) die "SOFTWARE must be fabric, paper or vanilla" ;; esac
 [[ "$HEAP" =~ ^[0-9]+[GM]$ ]] || die "HEAP must look like 6G or 6144M"
-for f in bin/mc-cmd bin/mc-console bin/mc-backup systemd/minecraft.service systemd/minecraft.socket \
-         systemd/minecraft-backup.service systemd/minecraft-backup.timer; do
+# install-helpers.sh and install-offsite.sh check for the scripts and units they install.
+for f in install-helpers.sh install-offsite.sh bin/mc-backup systemd/minecraft.service; do
   [ -f "$SCRIPT_DIR/$f" ] || die "Missing $SCRIPT_DIR/$f. Copy the whole server/ folder to the VM."
 done
 
@@ -159,12 +163,9 @@ if [ -n "$ADMIN_USER" ] && [ "$ADMIN_USER" != "root" ]; then
   usermod -aG minecraft "$ADMIN_USER"
 fi
 
-log "Installing helper commands and systemd units"
-install -m 0755 "$SCRIPT_DIR/bin/mc-cmd" "$SCRIPT_DIR/bin/mc-console" "$SCRIPT_DIR/bin/mc-backup" \
-  "$SCRIPT_DIR/bin/mc-allow" /usr/local/bin/
-install -m 0644 "$SCRIPT_DIR/systemd/minecraft.service" "$SCRIPT_DIR/systemd/minecraft.socket" \
-  "$SCRIPT_DIR/systemd/minecraft-backup.service" "$SCRIPT_DIR/systemd/minecraft-backup.timer" /etc/systemd/system/
-systemctl daemon-reload
+log "Installing helper commands, systemd units and the off-site backup job"
+# Also usable on its own, to update the helpers on a live server without stopping it.
+bash "$SCRIPT_DIR/install-helpers.sh"
 
 # Back up an existing world before changing anything else.
 if [ -f "$SERVER_DIR/server.properties" ]; then
@@ -347,4 +348,5 @@ Handy commands
   mc-cmd say hello
   mc-backup                       # manual backup (kept forever)
   ls -lh $BACKUP_DIR
+  sudo mc-offsite status          # off-site copies (set up once: docs/offsite-backups.md)
 EOF

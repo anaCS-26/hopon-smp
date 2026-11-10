@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# Encrypted off-site copies of the local backups, on Google Drive (rclone + rclone crypt).
+#   mc-offsite                  upload the newest local backup, then prune old off-site copies
+#   mc-offsite status           when the last upload worked and how much is stored off-site
+#   mc-offsite list             list the off-site backups
+#   mc-offsite fetch FILE       download and decrypt one backup into /var/lib/mc-offsite/fetched
+#   sudo mc-offsite setup-drive one-time: connect the Google Drive account (interactive)
+#   sudo mc-offsite setup-crypt one-time: add the encryption layer (asks for a passphrase)
+#
+# Runs as the 'mc-offsite' user, which can read the backups but is not the user the game
+# server (and its mods) run as, so a bad mod cannot read the Drive login or the passphrase.
+# Files are encrypted on this VM before upload; Google only ever sees ciphertext.
+# Uploads never overwrite or delete anything except in the prune step, which keeps the
+# newest $KEEP_REMOTE copies. Pruned copies are deleted for good, not moved to the Drive bin:
+# the bin counts against the 15 GB of free storage and would fill it within days.
+# Setup and restore steps: docs/offsite-backups.md
+set -euo pipefail
+
+BACKUP_DIR="${MC_BACKUP_DIR:-/srv/minecraft/backups}"
+STATE_DIR="${MC_OFFSITE_STATE:-/var/lib/mc-offsite}"
+RUN_AS="${MC_OFFSITE_USER:-mc-offsite}"
+KEEP_REMOTE="${KEEP_REMOTE:-7}"      # one upload a day = a week of history (fits a free Drive at ~1 GB each)
+STALE_HOURS=48
+DRIVE=mc-drive                       # rclone remote: the Google Drive login
+DRIVE_FOLDER=minecraft-backups       # folder inside that Drive
+CRYPT=mc-offsite                     # rclone remote: encryption layer on top of $DRIVE
+NAME_RE='^[A-Za-z0-9_.-]+-[0-9]{8}-[0-9]{6}Z-[A-Za-z0-9_-]+\.tar\.gz$'
+
+die() { echo "mc-offsite: $*" >&2; exit 1; }
+
+cmd="${1:-run}"
+case "$cmd" in run|status|list|fetch|setup-drive|setup-crypt) ;; *) die "unknown command '$cmd' (run, status, list, fetch, setup-drive, setup-crypt)" ;; esac
+[[ "$KEEP_REMOTE" =~ ^[0-9]+$ ]] && [ "$KEEP_REMOTE" -ge 1 ] || die "KEEP_REMOTE must be a whole number, 1 or more"
+
+# Everything runs as the unprivileged mc-offsite user. Root may switch to it; nobody else can.
+if [ "$(id -un)" != "$RUN_AS" ]; then
+  [ "$(id -u)" -eq 0 ] || die "run with sudo"
+  self="$(readlink -f "$0")"
+  cd /
+  exec runuser -u "$RUN_AS" -- env KEEP_REMOTE="$KEEP_REMOTE" "$self" "$@"
+fi
+
+export HOME="$STATE_DIR" XDG_CACHE_HOME="$STATE_DIR/cache" RCLONE_CONFIG="$STATE_DIR/rclone.conf"
+umask 077
+cd "$STATE_DIR"
+
+has_remote() { rclone listremotes 2>/dev/null | grep -qx "$1:"; }
+remote_type() { rclone config show "$1" 2>/dev/null | sed -n 's/^type *= *//p' | head -n1; }
+
+# Refuse to send anything anywhere unless the destination really is the encryption layer.
+require_ready() {
+  has_remote "$CRYPT" || die "not set up yet. See docs/offsite-backups.md (setup-drive, then setup-crypt)."
+  [ "$(remote_type "$CRYPT")" = "crypt" ] || die "the '$CRYPT' remote is not an encrypted (crypt) remote; refusing to upload."
+}
+
+# Off-site backups, oldest first, as "size<TAB>name".
+remote_list() {
+  rclone lsf --files-only --format sp --separator $'\t' "$CRYPT:" \
+    | sed -nE 's/^([0-9]+)\t([A-Za-z0-9_.-]+-([0-9]{8}-[0-9]{6}Z)-[A-Za-z0-9_-]+\.tar\.gz)$/\3\t\1\t\2/p' \
+    | sort | cut -f2-
+}
+
+case "$cmd" in
+  setup-drive)
+    echo "Opening rclone's setup. Create ONE remote, named exactly: $DRIVE"
+    echo "Follow docs/offsite-backups.md for what to answer."
+    exec rclone config
+    ;;
+
+  setup-crypt)
+    has_remote "$DRIVE" || die "connect Google Drive first: sudo mc-offsite setup-drive"
+    [ "$(remote_type "$DRIVE")" = "drive" ] || die "the '$DRIVE' remote is not a Google Drive remote"
+    has_remote "$CRYPT" && die "encryption is already set up. Changing the passphrase would make the existing off-site backups unreadable."
+    [ -r /dev/tty ] || die "needs a terminal to ask for the passphrase"
+    cat <<EOF
+Choose an encryption passphrase (16+ characters). Save it in your password manager FIRST.
+Without it the off-site backups cannot be read if this VM is ever lost. Nobody can reset it.
+EOF
+    read -rsp "Passphrase: " p1 < /dev/tty; echo
+    read -rsp "Again:      " p2 < /dev/tty; echo
+    [ "$p1" = "$p2" ] || die "the two did not match; nothing was changed"
+    [ "${#p1}" -ge 16 ] || die "too short (use 16+ characters); nothing was changed"
+    obscured="$(printf '%s' "$p1" | rclone obscure -)"
+    unset p1 p2
+    [ -n "$obscured" ] || die "rclone could not store the passphrase"
+    printf '\n[%s]\ntype = crypt\nremote = %s:%s\npassword = %s\n' "$CRYPT" "$DRIVE" "$DRIVE_FOLDER" "$obscured" >> "$RCLONE_CONFIG"
+    require_ready
+    rclone mkdir "$CRYPT:" && rclone lsf "$CRYPT:" >/dev/null || die "could not reach Google Drive through the encrypted remote"
+    echo "mc-offsite: encryption is set up. Try it now: sudo mc-offsite"
+    ;;
+
+  run)
+    require_ready
+    exec 9>"$STATE_DIR/.lock"
+    flock -n 9 || { echo "mc-offsite: another run is in progress" >&2; exit 0; }
+
+    newest="$(ls -1t "$BACKUP_DIR"/*.tar.gz 2>/dev/null | head -n1 || true)"
+    if [ -z "$newest" ]; then
+      echo "mc-offsite: no local backups yet, nothing to upload"
+      exit 0
+    fi
+    name="$(basename "$newest")"
+    [[ "$name" =~ $NAME_RE ]] || die "unexpected backup file name: $name"
+    gzip -t "$newest" || die "$name is damaged on disk; not uploading it"
+    size="$(stat -c %s "$newest")"
+
+    # --immutable: a file that is already off-site is never modified or replaced.
+    rclone copy "$newest" "$CRYPT:" --immutable --retries 3 --low-level-retries 10
+
+    # Confirm it is really there, at full size, before trusting it or pruning anything.
+    remote_size="$(remote_list | awk -F '\t' -v n="$name" '$2 == n { print $1 }')"
+    [ "$remote_size" = "$size" ] || die "upload of $name could not be confirmed (local $size bytes, off-site '${remote_size:-missing}')"
+    echo "mc-offsite: $name is off-site ($(du -h "$newest" | cut -f1))"
+    printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$name" > "$STATE_DIR/last-success"
+
+    mapfile -t old < <(remote_list | cut -f2 | head -n -"$KEEP_REMOTE")
+    for f in "${old[@]}"; do
+      if [ "$f" != "$name" ]; then rclone deletefile "$CRYPT:$f" --drive-use-trash=false; fi
+    done
+    [ "${#old[@]}" -eq 0 ] || echo "mc-offsite: pruned ${#old[@]} old off-site backup(s)"
+    ;;
+
+  list)
+    require_ready
+    remote_list | awk -F '\t' '{ printf "%8.1f MB  %s\n", $1 / 1048576, $2 }'
+    ;;
+
+  fetch)
+    require_ready
+    name="${2:-}"
+    [[ "$name" =~ $NAME_RE ]] || die "usage: mc-offsite fetch FILE   (see: mc-offsite list)"
+    remote_list | cut -f2 | grep -qxF "$name" || die "$name is not off-site. Copy a name from: sudo mc-offsite list"
+    mkdir -p "$STATE_DIR/fetched"
+    rclone copy "$CRYPT:$name" "$STATE_DIR/fetched/"
+    [ -f "$STATE_DIR/fetched/$name" ] || die "$name could not be downloaded"
+    gzip -t "$STATE_DIR/fetched/$name" || die "the downloaded file is damaged"
+    echo "mc-offsite: downloaded and decrypted to $STATE_DIR/fetched/$name"
+    ;;
+
+  status)
+    require_ready
+    if [ ! -s "$STATE_DIR/last-success" ]; then
+      echo "mc-offsite: no successful upload yet"
+      exit 1
+    fi
+    read -r when what < "$STATE_DIR/last-success"
+    age_h=$(( ($(date -u +%s) - $(date -u -d "$when" +%s)) / 3600 ))
+    echo "Last successful upload: $when ($age_h h ago): $what"
+    remote_list | awk -F '\t' '{ n++; b += $1 } END { printf "Off-site: %d backup(s), %.1f MB\n", n, b / 1048576 }'
+    if [ "$age_h" -ge "$STALE_HOURS" ]; then
+      echo "mc-offsite: WARNING: nothing has been uploaded for over $STALE_HOURS hours" >&2
+      exit 1
+    fi
+    ;;
+esac

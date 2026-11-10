@@ -1,0 +1,42 @@
+[Unit]
+Description=Minecraft world backup (encrypted off-site copy)
+Wants=network-online.target
+After=network-online.target minecraft-backup.service
+# Does nothing until Google Drive is connected (see docs/offsite-backups.md).
+ConditionPathExists=/var/lib/mc-offsite/rclone.conf
+OnFailure=mc-alert@%n.service
+
+[Service]
+Type=oneshot
+User=mc-offsite
+Group=mc-offsite
+# Read access to /srv/minecraft/backups, nothing more.
+SupplementaryGroups=minecraft
+ExecStart=/usr/local/bin/mc-offsite run
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=2h
+
+# ---- Sandboxing: can write only its own state folder (Drive login, passphrase, cache) ----
+StateDirectory=mc-offsite
+StateDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+UMask=0077

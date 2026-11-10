@@ -27,6 +27,9 @@ SuccessExitStatus=0 143
 # Crashes restart automatically. A deliberate "stop" (exit 0) does not.
 Restart=on-failure
 RestartSec=15
+# Tell the crew's Discord when the server dies on its own (not on a normal stop).
+# Runs as root ("+") only to start the alert unit; "$$" hands the variable to the shell.
+ExecStopPost=+/bin/sh -c 'case "$$SERVICE_RESULT" in success|"") ;; *) systemctl start --no-block mc-alert@minecraft.service.service ;; esac'
 
 # ---- Sandboxing: the server (and every mod it loads) can only write to /srv/minecraft ----
 NoNewPrivileges=true

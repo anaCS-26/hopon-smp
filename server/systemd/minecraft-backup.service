@@ -1,5 +1,6 @@
 [Unit]
 Description=Minecraft world backup (local)
+OnFailure=mc-alert@%n.service
 
 [Service]
 Type=oneshot

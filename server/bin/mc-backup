@@ -6,16 +6,37 @@
 #
 # While the server runs: autosave is paused, the world is flushed to disk and the
 # save is confirmed in the log before archiving; autosave is always re-enabled.
-# Only "auto" backups are pruned (newest $KEEP kept). Every other tag is kept forever.
+#
+# "auto" runs also do the housekeeping:
+#   * Skipped when nobody has played since the last automatic backup (no player file is
+#     newer than it), unless that backup is over a week old. An idle server would otherwise
+#     fill the disk with identical copies.
+#   * Automatic backups: the newest $KEEP_RECENT are kept, plus the last one of each day
+#     for $KEEP_DAILY more days.
+#   * The dashboard's safety copies (tags ending _prereset, _predelete, _prerestore, ...)
+#     are removed after $SAFETY_DAYS days.
+#   * Trashed worlds and mods (/srv/minecraft/trash) are removed after $TRASH_DAYS days.
+# Backups with any other tag (manual, pre-setup, pre-migrate, <world>_manual) are kept forever.
 set -euo pipefail
 
-SERVER_DIR=/srv/minecraft/server
-BACKUP_DIR=/srv/minecraft/backups
-KEEP="${KEEP:-28}"            # 28 x 6 h = one week of automatic backups
+SERVER_DIR="${MC_SERVER_DIR:-/srv/minecraft/server}"
+BACKUP_DIR="${MC_BACKUP_DIR:-/srv/minecraft/backups}"
+TRASH_DIR="${MC_TRASH_DIR:-/srv/minecraft/trash}"
+KEEP_RECENT="${KEEP_RECENT:-6}"       # 6 x 6 h = the last day and a half, every backup
+KEEP_DAILY="${KEEP_DAILY:-10}"        # then one a day for 10 more days
+SAFETY_DAYS="${SAFETY_DAYS:-30}"
+TRASH_DAYS="${TRASH_DAYS:-14}"
+MAX_SKIP_DAYS=7
+MIN_FREE_KB=$((1024 * 1024))          # refuse to start a backup that would leave under 1 GB free
 TAG="${1:-manual}"
 SAVE_TIMEOUT=120
+STAMP_RE='[0-9]{8}-[0-9]{6}Z'
 
 case "$TAG" in *[!A-Za-z0-9_-]*|"") echo "mc-backup: tag must be letters, digits, - or _" >&2; exit 2 ;; esac
+for n in "$KEEP_RECENT" "$KEEP_DAILY" "$SAFETY_DAYS" "$TRASH_DAYS"; do
+  [[ "$n" =~ ^[0-9]+$ ]] || { echo "mc-backup: KEEP_RECENT, KEEP_DAILY, SAFETY_DAYS and TRASH_DAYS must be whole numbers" >&2; exit 2; }
+done
+[ "$KEEP_RECENT" -ge 1 ] || { echo "mc-backup: KEEP_RECENT must be at least 1" >&2; exit 2; }
 
 mkdir -p "$BACKUP_DIR"
 exec 9>"$BACKUP_DIR/.lock"
@@ -28,9 +49,85 @@ cd "$SERVER_DIR"
 LEVEL="$(grep -m1 '^level-name=' server.properties 2>/dev/null | cut -d= -f2- || true)"
 LEVEL="${LEVEL:-world}"
 
+# Automatic backups, newest first (ordered by the timestamp in the name, not by file time).
+auto_backups() {
+  local f
+  for f in "$BACKUP_DIR"/*-auto.tar.gz; do
+    if [[ "$f" =~ -($STAMP_RE)-auto\.tar\.gz$ ]]; then printf '%s\t%s\n' "${BASH_REMATCH[1]}" "$f"; fi
+  done | sort -r | cut -f2-
+}
+
+housekeeping() {
+  local f stamp day cutoff name i=0 days=0 removed=0
+  local -A seen=()
+
+  while IFS= read -r f; do
+    [[ "$f" =~ -($STAMP_RE)-auto\.tar\.gz$ ]] || continue
+    day="${BASH_REMATCH[1]:0:8}"
+    i=$((i + 1))
+    if [ "$i" -le "$KEEP_RECENT" ]; then
+      seen[$day]=1
+    elif [ -z "${seen[$day]:-}" ] && [ "$days" -lt "$KEEP_DAILY" ]; then
+      seen[$day]=1
+      days=$((days + 1))
+    else
+      rm -f -- "$f"
+      removed=$((removed + 1))
+    fi
+  done < <(auto_backups)
+  [ "$removed" -eq 0 ] || echo "mc-backup: pruned $removed old automatic backup(s)"
+
+  removed="$(find "$BACKUP_DIR" -maxdepth 1 -type f -name '*_pre*.tar.gz' -mtime +"$SAFETY_DAYS" -print -delete | wc -l)"
+  [ "$removed" -eq 0 ] || echo "mc-backup: removed $removed safety backup(s) older than $SAFETY_DAYS days"
+
+  # Leftovers from a backup that was interrupted part-way.
+  find "$BACKUP_DIR" -maxdepth 1 -type f -name '*.tar.gz.partial' -mtime +1 -delete
+
+  # Trash entries are named <label>-<YYYYMMDD-HHMMSSZ>[-<random>]; the name says when they were
+  # trashed (a moved folder keeps its old file times, so those cannot be used).
+  if [ -d "$TRASH_DIR" ]; then
+    cutoff="$(date -u -d "-$TRASH_DAYS days" +%Y%m%d-%H%M%SZ)"
+    removed=0
+    for f in "$TRASH_DIR"/*; do
+      name="$(basename "$f")"
+      [[ "$name" =~ -($STAMP_RE)(-[0-9a-f]+)?$ ]] || continue
+      stamp="${BASH_REMATCH[1]}"
+      if [[ "$stamp" < "$cutoff" ]]; then
+        rm -rf -- "${TRASH_DIR:?}/$name"
+        removed=$((removed + 1))
+      fi
+    done
+    [ "$removed" -eq 0 ] || echo "mc-backup: emptied $removed item(s) trashed more than $TRASH_DAYS days ago"
+  fi
+}
+
 if [ ! -d "$LEVEL" ]; then
   echo "mc-backup: no world folder '$LEVEL' yet, nothing to back up"
   exit 0
+fi
+
+# Idle server: nothing a player did since the last automatic backup, so skip this one.
+if [ "$TAG" = "auto" ]; then
+  last="$(auto_backups | head -n1)"
+  player_dirs=()
+  for d in "$LEVEL/players/data" "$LEVEL/playerdata"; do
+    if [ -d "$d" ]; then player_dirs+=("$d"); fi
+  done
+  if [ -n "$last" ] && [ "${#player_dirs[@]}" -gt 0 ] \
+     && [ -n "$(find "${player_dirs[@]}" -type f -print -quit)" ] \
+     && [ -z "$(find "${player_dirs[@]}" -type f -newer "$last" -print -quit)" ] \
+     && [ -z "$(find "$last" -mtime +"$MAX_SKIP_DAYS")" ]; then
+    echo "mc-backup: nobody has played since $(basename "$last"); skipping"
+    housekeeping
+    exit 0
+  fi
+fi
+
+need_kb="$(du -sk "$LEVEL" | cut -f1)"
+free_kb="$(df -Pk "$BACKUP_DIR" | awk 'NR==2 { print $4 }')"
+if [ "$free_kb" -lt $((need_kb + MIN_FREE_KB)) ]; then
+  echo "mc-backup: not enough disk space: the world is $((need_kb / 1024)) MB and only $((free_kb / 1024)) MB is free. Delete old backups or worlds." >&2
+  exit 1
 fi
 
 # What to archive: the world (plus Paper-style split dimensions) and small server state.
@@ -38,7 +135,7 @@ items=()
 for p in "$LEVEL" "${LEVEL}_nether" "${LEVEL}_the_end" \
          server.properties whitelist.json ops.json banned-players.json banned-ips.json \
          usercache.json config EasyAuth; do
-  [ -e "$p" ] && items+=("$p")
+  if [ -e "$p" ]; then items+=("$p"); fi
 done
 
 if systemctl is-active --quiet minecraft; then
@@ -64,9 +161,4 @@ tar -czf "$out.partial" "${items[@]}"
 mv "$out.partial" "$out"
 echo "mc-backup: wrote $out ($(du -h "$out" | cut -f1))"
 
-# Prune old automatic backups only.
-mapfile -t old < <(ls -1t "$BACKUP_DIR"/*-auto.tar.gz 2>/dev/null | tail -n +$((KEEP + 1)))
-if [ "${#old[@]}" -gt 0 ]; then
-  rm -f -- "${old[@]}"
-  echo "mc-backup: pruned ${#old[@]} old automatic backup(s)"
-fi
+if [ "$TAG" = "auto" ]; then housekeeping; fi
