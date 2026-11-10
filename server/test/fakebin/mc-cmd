@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Stand-in for mc-cmd in tests: the "server" answers in logs/latest.log.
+# FAKE_ROTATE=1 replaces latest.log first, as Minecraft does at midnight.
+# FAKE_NO_SAVE=1 never confirms the save.
+log="$MC_SERVER_DIR/logs/latest.log"
+case "$*" in
+  save-off)
+    if [ "${FAKE_ROTATE:-}" = 1 ]; then mv "$log" "$log.old"; : > "$log"; fi
+    echo "[00:00:01] [Server thread/INFO]: Automatic saving is now disabled" >> "$log" ;;
+  "save-all flush")
+    [ "${FAKE_NO_SAVE:-}" = 1 ] || echo "[00:00:01] [Server thread/INFO]: Saved the game" >> "$log" ;;
+  save-on) echo "[00:00:02] [Server thread/INFO]: Automatic saving is now enabled" >> "$log" ;;
+esac

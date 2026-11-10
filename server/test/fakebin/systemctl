@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
-# Stand-in for systemctl in tests: the Minecraft service is never running.
+# Stand-in for systemctl in tests: the Minecraft service is "running" only when FAKE_ACTIVE=1.
+[ "${FAKE_ACTIVE:-}" = 1 ] && exit 0
 exit 3
