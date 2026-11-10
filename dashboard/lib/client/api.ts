@@ -34,26 +34,69 @@ export async function api<T = any>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', 
   return data as T;
 }
 
+// ---------------------------------------------------------------- shared GET cache
+// The last answer for each GET path, shared by every page in this tab. Coming back to a page
+// shows what it showed last time straight away and refreshes in the background, instead of a
+// blank "Loading…" while the request goes to Vercel and on to the VM. Logging out reloads the
+// page, which empties it.
+type Cached = { seq: number; json: string; data: unknown };
+const cache = new Map<string, Cached>();
+const inflight = new Map<string, Promise<unknown>>();
+const CACHE_MAX = 40;
+let seq = 0;
+
+/** Store a response. Returns the object to render: the previous one if nothing changed (so React
+ *  can skip the re-render), or the newer one if a slower, older request finished last. */
+function remember(path: string, n: number, data: unknown) {
+  const old = cache.get(path);
+  if (old && old.seq > n) return old.data;
+  const json = JSON.stringify(data);
+  if (old && old.json === json) {
+    old.seq = n;
+    return old.data;
+  }
+  cache.delete(path); // re-insert so the Map's order is least recently updated first
+  cache.set(path, { seq: n, json, data });
+  if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
+  return data;
+}
+
+/** GET through the cache. Polls of the same path share one request; `fresh` (used right after an
+ *  action) always starts a new one, so it can't be answered by a request sent before the action. */
+function getShared<T>(path: string, fresh: boolean): Promise<T> {
+  const running = inflight.get(path);
+  if (running && !fresh) return running as Promise<T>;
+  const n = ++seq;
+  const p = api<T>('GET', path)
+    .then((d) => remember(path, n, d) as T)
+    .finally(() => {
+      if (inflight.get(path) === p) inflight.delete(path);
+    });
+  inflight.set(path, p);
+  return p;
+}
+
 /**
  * Fetch (and optionally poll) an agent GET route.
  * `interval` is milliseconds, or a function of the latest data that returns milliseconds, so a
  * page can poll quickly while something is happening and slowly when nothing is. 0 = no polling.
  * Polling pauses while the tab is hidden and catches up the moment it is shown again.
+ * A poll that returns exactly what is already on screen does not re-render the page.
  */
 export function useAgent<T = any>(path: string | null, interval: number | ((data: T | null) => number) = 0) {
-  const [data, setData] = useState<T | null>(null);
+  const [data, setData] = useState<T | null>(() => ((path && cache.get(path)?.data) as T) ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !(path && cache.has(path)));
   const alive = useRef(true);
-  const latest = useRef<T | null>(null);
+  const latest = useRef<T | null>(data);
   const pace = useRef(interval);
   pace.current = interval;
   const reschedule = useRef<() => void>(() => {});
 
-  const load = useCallback(async () => {
+  const fetchData = useCallback(async (fresh: boolean) => {
     if (!path) return;
     try {
-      const d = await api<T>('GET', path);
+      const d = await getShared<T>(path, fresh);
       if (alive.current) {
         latest.current = d;
         setData(d);
@@ -68,7 +111,13 @@ export function useAgent<T = any>(path: string | null, interval: number | ((data
 
   useEffect(() => {
     alive.current = true;
-    latest.current = null;
+    const hit = path ? cache.get(path) : undefined;
+    latest.current = (hit?.data as T) ?? null;
+    if (hit) {
+      setData(hit.data as T);
+      setLoading(false);
+    }
+    const load = () => fetchData(false);
     let active = true; // this run of the effect only; a stale run must never schedule again
     let timer: ReturnType<typeof setTimeout> | undefined;
     const wait = () => (typeof pace.current === 'function' ? pace.current(latest.current) : pace.current);
@@ -95,13 +144,13 @@ export function useAgent<T = any>(path: string | null, interval: number | ((data
       document.removeEventListener('visibilitychange', onVisible);
       reschedule.current = () => {};
     };
-  }, [load]);
+  }, [path, fetchData]);
 
   /** Refresh now (e.g. right after an action), then pick the pace again from the new data. */
   const reload = useCallback(async () => {
-    await load();
+    await fetchData(true);
     reschedule.current();
-  }, [load]);
+  }, [fetchData]);
 
   return { data, error, loading, reload, setData };
 }

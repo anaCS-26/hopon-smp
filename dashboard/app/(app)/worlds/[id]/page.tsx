@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
 import { useAgent, timeAgo } from '@/lib/client/api';
 import { WorldBlock, Avatar } from '@/components/pixel';
@@ -25,10 +25,11 @@ const TABS = [
 export default function WorldPage() {
   const { id } = useParams<{ id: string }>();
   const sp = useSearchParams();
-  const router = useRouter();
   const tab = (sp.get('tab') as (typeof TABS)[number][0]) || 'overview';
   const { data, error, reload } = useAgent<{ world: World; schema: SettingSpec[] }>(`worlds/${id}`, 6000);
-  const setTab = useCallback((t: string) => router.replace(`/worlds/${id}${t === 'overview' ? '' : `?tab=${t}`}`, { scroll: false }), [router, id]);
+  // Plain history update: Next's router keeps useSearchParams in sync, and switching tabs doesn't
+  // wait for a server round trip the way router.replace does.
+  const setTab = useCallback((t: string) => window.history.replaceState(null, '', `/worlds/${id}${t === 'overview' ? '' : `?tab=${t}`}`), [id]);
 
   if (error && !data) return <div className="notice danger" style={{ marginTop: 20 }}><p>{error} · <Link href="/worlds">back to worlds</Link></p></div>;
   if (!data) return <p className="muted">Loading world…</p>;

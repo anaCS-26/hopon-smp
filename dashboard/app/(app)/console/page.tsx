@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { api, useAgent } from '@/lib/client/api';
 import { useAction } from '@/components/ui';
 import { useMe } from '@/components/me';
@@ -24,11 +24,41 @@ function lineClass(l: string) {
   return '';
 }
 
+const LogLine = memo(function LogLine({ text }: { text: string }) {
+  return <div className={lineClass(text)}>{text}</div>;
+});
+
+/**
+ * A key for each log line that stays with it as the 300-line window slides down the log, so a
+ * poll adds the new rows and drops the oldest instead of rewriting all 300 every 2 seconds.
+ */
+function useLineKeys(lines: string[] | undefined) {
+  const prev = useRef<{ lines: string[]; keys: number[]; next: number }>({ lines: [], keys: [], next: 0 });
+  return useMemo(() => {
+    if (!lines) return [];
+    const p = prev.current;
+    // How far did the window move? Find where the new lines start in the previous ones.
+    let shift = 0;
+    for (; shift < p.lines.length; shift++) {
+      const n = Math.min(p.lines.length - shift, lines.length);
+      let i = 0;
+      while (i < n && p.lines[shift + i] === lines[i]) i++;
+      if (i === n) break;
+    }
+    const overlap = Math.min(p.lines.length - shift, lines.length);
+    let next = p.next;
+    const keys = lines.map((_, i) => (i < overlap ? p.keys[shift + i] : next++));
+    prev.current = { lines, keys, next };
+    return keys;
+  }, [lines]);
+}
+
 export default function ConsolePage() {
   const me = useMe();
   const { data, reload } = useAgent<LogData>('server/log?lines=300', 2000);
   const [cmd, setCmd] = useState('');
   const { busy, run } = useAction();
+  const keys = useLineKeys(data?.lines);
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const canHost = me.can.consoleHost;
@@ -64,7 +94,7 @@ export default function ConsolePage() {
             }}
             aria-live="off"
           >
-            {data?.lines.length ? data.lines.map((l, i) => <div key={i} className={lineClass(l)}>{l}</div>) : <span className="muted">No log yet. Start the server to see it here.</span>}
+            {data?.lines.length ? data.lines.map((l, i) => <LogLine key={keys[i]} text={l} />) : <span className="muted">No log yet. Start the server to see it here.</span>}
           </div>
           <form
             onSubmit={(e) => {

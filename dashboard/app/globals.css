@@ -67,6 +67,9 @@ hr { border: 0; height: 4px; background: var(--edge); box-shadow: 0 4px 0 var(--
 /* ------------------------------------------------------------ sky backdrop */
 .sky {
   position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  /* Own compositor layer: scrolling slides the page over it without repainting the gradient,
+     stars and moon glow on every frame. */
+  will-change: transform; contain: strict;
   background:
     linear-gradient(180deg, #0b0916 0%, #15112b 45%, #241a3f 78%, #2f1f44 100%);
 }
@@ -203,10 +206,17 @@ label.check, .check { display: flex; gap: 10px; align-items: center; cursor: poi
 .title-tag.rare { background: var(--tier-rare); }
 .title-tag.epic { background: var(--tier-epic); }
 .title-tag.legendary {
-  background: linear-gradient(100deg, var(--torch) 0%, var(--gold) 40%, #fff3c4 50%, var(--gold) 60%, var(--torch) 100%);
-  background-size: 300% 100%; animation: shimmer 3.5s steps(18) infinite;
+  position: relative; overflow: hidden; isolation: isolate;
+  background: linear-gradient(100deg, var(--torch) 0%, var(--gold) 35%, var(--gold) 65%, var(--torch) 100%);
 }
-@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+/* The shine is a separate layer that slides across (a transform the GPU can run on its own),
+   not a moving background that repaints the tag several times a second on every page. */
+.title-tag.legendary::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(100deg, transparent 30%, #fff3c4 50%, transparent 70%);
+  transform: translateX(-100%); animation: shimmer 3.5s steps(18) infinite;
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
 
 /* ------------------------------------------------------------ status */
 .lamp { width: 20px; height: 20px; flex: none; background: var(--ink-3); box-shadow: inset -4px -4px 0 #0005, inset 4px 4px 0 #fff3; }
@@ -237,7 +247,9 @@ label.check, .check { display: flex; gap: 10px; align-items: center; cursor: poi
 .bar.warn > i { background-color: var(--torch); box-shadow: inset 0 -4px 0 var(--torch-d), inset 0 3px 0 var(--torch-l); }
 .bar.danger > i { background-color: var(--redstone); box-shadow: inset 0 -4px 0 var(--redstone-d), inset 0 3px 0 var(--redstone-l); }
 .bar.busy > i { width: 40% !important; animation: slide 1.4s steps(14) infinite; }
-@keyframes slide { from { margin-left: -40%; } to { margin-left: 100%; } }
+/* Moves with transform, not margin, so each step doesn't re-run page layout. 250% of the 40%-wide
+   stripe is the bar's full width. */
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 .bar.busy { overflow: hidden; }
 
 .meter { display: grid; grid-template-columns: 70px 1fr 90px; gap: 10px; align-items: center; margin: 8px 0; font-size: 15px; }
@@ -285,6 +297,7 @@ label.check, .check { display: flex; gap: 10px; align-items: center; cursor: poi
   background: #07060c; color: #d9f7c9; font-family: var(--font-mono); font-size: 19px; line-height: 1.15;
   padding: 12px 14px; height: 460px; overflow: auto; box-shadow: inset 4px 4px 0 #000, inset -4px -4px 0 var(--stone-2);
   white-space: pre-wrap; word-break: break-word;
+  contain: content; /* new log lines only re-lay-out the log box, not the page */
 }
 .console .warn { color: var(--torch); }
 .console .err { color: var(--redstone); }
@@ -315,6 +328,9 @@ table.plain td { padding: 8px 6px; border-bottom: 3px dashed #ffffff10; vertical
 .crew-logo { display: block; object-fit: contain; filter: drop-shadow(3px 3px 0 #0008); }
 .spin { animation: spin 1s steps(8) infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.route-loading { animation: route-loading-in 0s .25s both; }
+@keyframes route-loading-in { from { visibility: hidden; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

@@ -24,10 +24,21 @@ function PixelGrid({ grid, palette, size, title, className }: { grid: Grid; pale
   );
 }
 
-/** The crew logo (the group's own art, in public/brand). */
+/** The crew logo (the group's own art, in public/brand). crew-logo.png is the 256 px original;
+ *  pages load small WebP copies of it (7 KB / 18 KB instead of 63 KB). */
 export function CrewLogo({ size = 44, className = 'crew-logo' }: { size?: number; className?: string }) {
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src="/brand/crew-logo.png" alt="Hop On crew logo" width={size} height={size} className={className} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/brand/crew-logo-128.webp"
+      srcSet="/brand/crew-logo-128.webp 128w, /brand/crew-logo-256.webp 256w"
+      sizes={`${size}px`}
+      alt="Hop On crew logo"
+      width={size}
+      height={size}
+      className={className}
+    />
+  );
 }
 
 // ---------------------------------------------------------------- procedural faces
