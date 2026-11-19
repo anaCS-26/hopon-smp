@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/server/env';
-import { unseal, oauthCookieName } from '@/lib/server/session';
+import { unseal, oauthCookieName, clearCookie } from '@/lib/server/session';
 import { finishLogin, publicBase } from '@/lib/server/login';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,7 @@ type OAuthState = { s: string; v: string; i: string | null; x: number };
 
 function fail(base: string, msg: string) {
   const res = NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(msg)}`, base), 303);
-  res.cookies.delete(oauthCookieName());
+  clearCookie(res, oauthCookieName());
   return res;
 }
 

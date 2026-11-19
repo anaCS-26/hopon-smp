@@ -20,7 +20,10 @@ StandardError=journal
 ExecStart=/usr/bin/java @jvm.args -jar server.jar nogui
 
 # Clean shutdown: ask the server to stop (it saves the world), then wait for it to exit.
-ExecStop=/bin/sh -c 'echo stop > /run/minecraft.console; while kill -0 $MAINPID 2>/dev/null; do sleep 1; done'
+# systemd also runs ExecStop after the server has ALREADY exited (a crash, or "stop" typed in
+# the console). Then $MAINPID is empty, and we must not write "stop": it would sit in the pipe
+# and shut down the next start straight away.
+ExecStop=/bin/sh -c 'if [ -n "$MAINPID" ] && kill -0 "$MAINPID" 2>/dev/null; then echo stop > /run/minecraft.console; while kill -0 "$MAINPID" 2>/dev/null; do sleep 1; done; fi'
 TimeoutStopSec=180
 SuccessExitStatus=0 143
 

@@ -97,10 +97,14 @@ test('helper: deleting and resetting move to trash, never delete; live world is 
   svcState = 'active';
   assert.throws(() => run('reset-world', ['hopon']), /stop it first/);
   assert.throws(() => run('trash-world', ['hopon']), /stop it first/);
+  svcState = 'unknown'; // couldn't ask systemd: assume it may be running
+  assert.throws(() => run('reset-world', ['hopon']), /stop it first/);
   svcState = 'inactive';
   run('reset-world', ['hopon']);
   assert.ok(!fs.existsSync(p('server', 'world')));
   assert.ok(fs.existsSync(p('server', 'mods')), 'reset keeps mods');
+  // Backing up the just-reset active world is skipped, not an error (mc-backup is /bin/false here).
+  assert.deepEqual(run('backup', ['hopon', 'manual']), { file: null, skipped: 'world never played' });
 });
 
 test('helper: inactive-world backup and restore round-trip', { skip: !hasTar && 'tar not available' }, () => {

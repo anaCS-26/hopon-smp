@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sessionCookieName } from '@/lib/server/session';
+import { sessionCookieName, clearCookie } from '@/lib/server/session';
 import { publicBase } from '@/lib/server/login';
 
 export const dynamic = 'force-dynamic';
@@ -10,6 +10,6 @@ export async function POST(req: NextRequest) {
   const origin = req.headers.get('origin');
   if (!origin || new URL(origin).host !== new URL(base).host) return NextResponse.json({ error: 'bad origin' }, { status: 403 });
   const res = NextResponse.redirect(new URL('/login?bye=1', base), 303);
-  res.cookies.delete(sessionCookieName());
+  clearCookie(res, sessionCookieName());
   return res;
 }

@@ -727,10 +727,14 @@ export function createService({ store, system, modrinth, config, notify = async 
 
     step?.(`downloading ${project.title} (checking sha512)`);
     const bytes = await modrinth.download(file);
-    const filename = `${project.slug}--${String(version.version_number).replace(/[^A-Za-z0-9._+-]/g, '_')}.jar`.slice(0, 128);
+    // Shorten the name BEFORE adding ".jar": cutting afterwards could chop the extension off
+    // a long version string, and the server only loads files ending in .jar.
+    const filename = `${`${project.slug}--${String(version.version_number).replace(/[^A-Za-z0-9._+-]/g, '_')}`.slice(0, 124)}.jar`;
     const old = world.mods.find((m) => m.projectId === project.id || m.slug === project.slug);
-    if (old && old.filename !== filename) await system.removeMod(world.id, old.filename);
+    // New file in first, old one out second: if the install fails (bad download, full disk),
+    // the world keeps its working version. Removing first could leave it without EasyAuth.
     await system.installMod(world.id, filename, bytes, file.hashes.sha512);
+    if (old && old.filename !== filename) await system.removeMod(world.id, old.filename);
     const record = {
       projectId: project.id,
       slug: project.slug,
@@ -798,11 +802,20 @@ export function createService({ store, system, modrinth, config, notify = async 
     return { uploadUrl: `${config.publicUrl.replace(/\/$/, '')}/v1/uploads/${token}`, maxBytes: PACK_LIMITS.maxBytes, expiresAt: new Date(Date.now() + TICKET_TTL_MS).toISOString() };
   }
 
-  /** Called by the unauthenticated upload route; the ticket is the credential. */
-  async function uploadPack(token, buf, filename) {
+  /**
+   * Called by the unauthenticated upload route BEFORE it reads the body, so a stranger with a
+   * made-up link can't make us buffer 100 MB. Single use: the ticket is gone even if the
+   * upload then fails.
+   */
+  function claimPackTicket(token) {
     const t = tickets.get(token);
-    tickets.delete(token); // single use, even if it fails
+    tickets.delete(token);
     if (!t || t.exp < Date.now()) throw new HttpError(401, 'upload link expired; try again');
+    return t;
+  }
+
+  /** `t` is a ticket from claimPackTicket(); the ticket is the credential. */
+  async function uploadPack(t, buf, filename) {
     const user = store.user(t.userId);
     const w = worldOr404(t.worldId);
     authorize(user, 'pack.manage', { world: w });
@@ -938,7 +951,7 @@ export function createService({ store, system, modrinth, config, notify = async 
     init, login, resolveActor, me, listUsers, updateUser, setMcName, whitelistUser, logoutAll,
     listInvites, createInvite, revokeInvite, status, start, stop, restart, consoleCommand, log,
     listWorlds, getWorld, createWorld, renameWorld, updateSettings, activateWorld, resetWorld, deleteWorld,
-    modSearch, modVersions, installMod, removeMod, packTicket, uploadPack, removePack, isKnownPack,
+    modSearch, modVersions, installMod, removeMod, packTicket, claimPackTicket, uploadPack, removePack, isKnownPack,
     listBackups, backupNow, restoreBackup, joinQueue, leaveQueue, readAudit, activity,
     _jobs: () => ({ job, lastJob }),
   };

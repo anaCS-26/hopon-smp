@@ -48,7 +48,9 @@ export function createHelper(roots = ROOTS, { serviceState } = {}) {
   });
   const requireStopped = () => {
     const s = state();
-    if (!['inactive', 'failed', 'unknown'].includes(s)) fail(`the server is ${s}; stop it first`);
+    // 'unknown' means we couldn't ask systemd. Treat that as "maybe running": moving a world
+    // folder out from under a running server would corrupt it.
+    if (!['inactive', 'failed'].includes(s)) fail(`the server is ${s}; stop it first`);
   };
   const active = () => (fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').trim() : null);
   const worldDir = (id) => path.join(worlds, id);
@@ -146,6 +148,9 @@ export function createHelper(roots = ROOTS, { serviceState } = {}) {
       need(KIND, kind, 'backup kind');
       const tag = `${id}_${kind}`;
       if (active() === id) {
+        // Just reset (or never started): mc-backup would exit 0 without writing a file, and
+        // failing here would block Restore, Remove mod and Reset until the world is played.
+        if (!fs.existsSync(path.join(server, 'world'))) return { file: null, skipped: 'world never played' };
         const out = execFileSync(roots.mcBackup, [tag], { encoding: 'utf8', timeout: 900_000 });
         const m = /wrote \S*\/(world-[^\s/]+\.tar\.gz)/.exec(out);
         if (!m) fail(`mc-backup did not report a file: ${out.slice(-200)}`);

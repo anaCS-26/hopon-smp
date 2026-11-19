@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
+import net from 'node:net';
 import { Store } from '../src/store.mjs';
 import { createService } from '../src/service.mjs';
 import { createHttpServer } from '../src/http.mjs';
@@ -340,6 +341,42 @@ test('resource packs: ticketed upload, single use, CORS-locked, validated', asyn
   const r = await fetch(t2.body.uploadUrl, { method: 'PUT', body: evil, headers: { origin: 'http://localhost:3000' } });
   assert.equal(r.status, 400);
   assert.match((await r.json()).error, /unsafe file/);
+});
+
+/** Send a raw HTTP request (fetch can't send odd request lines) and return the status code. */
+function rawStatus(text) {
+  return new Promise((resolve, reject) => {
+    const sock = net.connect(server.address().port, '127.0.0.1', () => sock.write(text));
+    let got = '';
+    sock.setTimeout(3000, () => { sock.destroy(); reject(new Error(`no response (got: ${got.slice(0, 80)})`)); });
+    sock.on('data', (d) => {
+      got += d;
+      const m = /^HTTP\/1\.1 (\d{3})/.exec(got);
+      if (m) { sock.destroy(); resolve(Number(m[1])); }
+    });
+    sock.on('error', reject);
+  });
+}
+
+test('http: a malformed request line gets a 400 and does not crash the agent', async () => {
+  assert.equal(await rawStatus('GET //a:99999/x HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n'), 400);
+  assert.equal(await rawStatus('GET //[::1/x HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n'), 400);
+  assert.equal((await fetch(base + '/healthz')).status, 200, 'still alive');
+});
+
+test('resource packs: a made-up upload link is refused before the body is read, and is not rate-limited for others', async () => {
+  // Claims 100 MB but sends nothing: must be answered at once, not after waiting for the body.
+  const fake = 'A'.repeat(43);
+  assert.equal(await rawStatus(`PUT /v1/uploads/${fake} HTTP/1.1\r\nHost: x\r\nContent-Length: 104857600\r\n\r\n`), 401);
+  // Strangers spamming bad links (all from 127.0.0.1 behind Funnel) must not block real uploads.
+  for (let i = 0; i < 8; i++) {
+    const r = await fetch(`${base}/v1/uploads/${fake}`, { method: 'PUT', body: 'x', headers: { origin: 'http://localhost:3000' } });
+    assert.equal(r.status, 401);
+  }
+  const t = await call('POST', `/v1/worlds/${users.memberWorld}/pack-ticket`, { as: users.member });
+  const zip = buildZip({ 'pack.mcmeta': '{"pack":{"pack_format":60,"description":"y"}}' });
+  const ok = await fetch(t.body.uploadUrl, { method: 'PUT', body: zip, headers: { origin: 'http://localhost:3000' } });
+  assert.equal(ok.status, 200);
 });
 
 test('whitelisting goes through the offline-UUID helper and needs an admin', async () => {

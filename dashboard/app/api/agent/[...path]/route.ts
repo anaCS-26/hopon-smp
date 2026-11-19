@@ -1,7 +1,7 @@
 // Browser -> agent proxy. Checks the session and CSRF, maps the path through a fixed
 // allowlist, signs the request and forwards it. Never forwards cookies or raw headers.
 import { NextRequest, NextResponse } from 'next/server';
-import { readSession, actorFor, sessionCookieName } from '@/lib/server/session';
+import { readSession, actorFor, sessionCookieName, clearCookie } from '@/lib/server/session';
 import { agentFetch } from '@/lib/server/agent';
 import { toAgentPath, csrfOk } from '@/lib/server/allowlist.mjs';
 
@@ -41,7 +41,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const r = await agentFetch(req.method, agentPath, { actor: actorFor(session), body });
   const res = NextResponse.json(r.body ?? {}, { status: r.status, headers: { 'cache-control': 'no-store' } });
   // The agent says this session is no longer valid (logged out everywhere, or access removed).
-  if (r.status === 401) res.cookies.delete(sessionCookieName());
+  if (r.status === 401) clearCookie(res, sessionCookieName());
   return res;
 }
 

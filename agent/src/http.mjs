@@ -1,6 +1,7 @@
 // HTTP layer: signature check, rate limits, routing, JSON in/out. No business logic here.
 import http from 'node:http';
 import fs from 'node:fs';
+import { pipeline } from 'node:stream';
 import { verifyRequest, NonceCache } from './hmac.mjs';
 import { RateLimiter } from './ratelimit.mjs';
 import { ValidationError } from './validate.mjs';
@@ -72,21 +73,37 @@ function send(res, status, body, extra = {}) {
   res.end(data);
 }
 
+const httpErr = (status, msg) => Object.assign(new Error(msg), { status });
+
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
-    const declared = Number(req.headers['content-length'] || 0);
-    if (declared > limit) return reject(Object.assign(new Error('request body too large'), { status: 413 }));
+    const header = req.headers['content-length'];
+    const declared = header === undefined ? null : Number(header);
+    if (declared !== null && !(Number.isSafeInteger(declared) && declared >= 0)) return reject(httpErr(400, 'bad content-length'));
+    if (declared !== null && declared > limit) return reject(httpErr(413, 'request body too large'));
+    // With a Content-Length (browsers always send one for a file), fill one buffer of exactly
+    // that size. Collecting chunks and joining them at the end would briefly need twice the
+    // memory, which for a 100 MB pack is most of the agent's 256 MB limit.
+    const fixed = declared !== null ? Buffer.allocUnsafe(declared) : null;
     const chunks = [];
     let size = 0;
+    let done = false;
+    const finish = (fn, v) => { if (!done) { done = true; fn(v); } };
     req.on('data', (c) => {
-      size += c.length;
-      if (size > limit) {
-        reject(Object.assign(new Error('request body too large'), { status: 413 }));
+      if (done) return;
+      if (size + c.length > (fixed ? fixed.length : limit)) {
+        finish(reject, httpErr(413, 'request body too large'));
         req.destroy();
-      } else chunks.push(c);
+        return;
+      }
+      if (fixed) c.copy(fixed, size);
+      else chunks.push(c);
+      size += c.length;
     });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
+    req.on('end', () => finish(resolve, fixed ? fixed.subarray(0, size) : Buffer.concat(chunks)));
+    req.on('error', (e) => finish(reject, e));
+    // The client went away mid-upload: settle instead of waiting forever.
+    req.on('close', () => finish(reject, httpErr(400, 'upload interrupted')));
   });
 }
 
@@ -97,9 +114,13 @@ export function createHttpServer({ svc, keys, config, log = console, rateClasses
   const corsOrigin = config.dashboardOrigin;
 
   const handler = async (req, res) => {
-    const url = new URL(req.url, 'http://agent.local');
-    const pathname = url.pathname;
+    let pathname = '(unparsed)';
     try {
+      // Only plain paths. "//host:99999/..." is a valid HTTP request line but makes new URL()
+      // throw, and before this check that took the whole agent down.
+      if (typeof req.url !== 'string' || !req.url.startsWith('/') || req.url.startsWith('//')) return send(res, 400, { error: 'bad request' });
+      const url = new URL(req.url, 'http://agent.local');
+      pathname = url.pathname;
       if (req.method === 'GET' && pathname === '/healthz') return send(res, 200, { ok: true });
 
       // Public, content-addressed resource packs for players' game clients.
@@ -110,7 +131,8 @@ export function createHttpServer({ svc, keys, config, log = console, rateClasses
         const st = fs.statSync(file);
         res.writeHead(200, { 'content-type': 'application/zip', 'content-length': st.size, 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' });
         if (req.method === 'HEAD') return res.end();
-        return fs.createReadStream(file).pipe(res);
+        // pipeline (not .pipe) so a read error closes the response instead of crashing the agent.
+        return pipeline(fs.createReadStream(file), res, () => {});
       }
 
       // Browser upload of a resource pack, authorised by a one-time ticket.
@@ -124,10 +146,23 @@ export function createHttpServer({ svc, keys, config, log = console, rateClasses
         }
         if (req.method !== 'PUT') return send(res, 405, { error: 'method not allowed' }, cors);
         if (!cors['access-control-allow-origin'] && req.headers.origin) return send(res, 403, { error: 'origin not allowed' });
-        const rl = limiter.take(`ip:${req.socket.remoteAddress}`, 'upload');
-        if (!rl.ok) return send(res, 429, { error: 'too many uploads, slow down' }, { ...cors, 'retry-after': String(rl.retryAfter) });
+        // Check the one-time ticket BEFORE reading anything, so a made-up link costs us nothing.
+        // Rate-limit per crew member: behind Tailscale Funnel every request comes from
+        // 127.0.0.1, so a per-IP limit would let one stranger block everyone's uploads.
+        let ticket;
+        try {
+          ticket = svc.claimPackTicket(um[1]);
+        } catch (e) {
+          res.setHeader('connection', 'close'); // don't wait for the unread body
+          return send(res, e.status || 401, { error: e.message }, cors);
+        }
+        const rl = limiter.take(`upload:${ticket.userId}`, 'upload');
+        if (!rl.ok) {
+          res.setHeader('connection', 'close');
+          return send(res, 429, { error: 'too many uploads, slow down' }, { ...cors, 'retry-after': String(rl.retryAfter) });
+        }
         const body = await readBody(req, PACK_LIMITS.maxBytes);
-        const out = await svc.uploadPack(um[1], body, req.headers['x-file-name']);
+        const out = await svc.uploadPack(ticket, body, req.headers['x-file-name']);
         return send(res, 200, out, cors);
       }
 
@@ -166,11 +201,24 @@ export function createHttpServer({ svc, keys, config, log = console, rateClasses
     } catch (e) {
       const status = e instanceof ValidationError ? 400 : Number.isInteger(e.status) ? e.status : 500;
       if (status >= 500) log.error?.(`[error] ${req.method} ${pathname}:`, e);
+      if (res.headersSent) return res.destroy();
       return send(res, status, { error: status >= 500 && !e.status ? 'something went wrong on the server' : e.message, ...(e.field ? { field: e.field } : {}) });
     }
   };
 
-  const server = http.createServer(handler);
+  // Last line of defence: an async handler that throws would otherwise be an unhandled
+  // promise rejection, which stops Node (and with it every running job).
+  const server = http.createServer((req, res) => {
+    handler(req, res).catch((e) => {
+      log.error?.('[error] unhandled in request handler:', e);
+      try {
+        if (res.headersSent) res.destroy();
+        else send(res, 500, { error: 'something went wrong on the server' });
+      } catch {
+        /* the socket is already gone */
+      }
+    });
+  });
   server.headersTimeout = 10_000;
   server.requestTimeout = 180_000;
   server.keepAliveTimeout = 5_000;

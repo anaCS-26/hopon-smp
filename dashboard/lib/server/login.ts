@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { agentFetch } from './agent';
-import { newSession, sessionCookie, inviteCookieName, oauthCookieName } from './session';
+import { newSession, sessionCookie, inviteCookieName, oauthCookieName, clearCookie } from './session';
 
 /** Ask the agent to log this Discord user in, and set our session cookie on success. */
 export async function finishLogin(base: string, who: { discordId: string; discordName: string; avatarUrl: string | null; inviteCode?: string | null }) {
@@ -12,14 +12,14 @@ export async function finishLogin(base: string, who: { discordId: string; discor
     const url = new URL('/login', base);
     url.searchParams.set('error', (r.body?.error || 'login failed').slice(0, 160));
     const res = NextResponse.redirect(url, 303);
-    res.cookies.delete(oauthCookieName());
+    clearCookie(res, oauthCookieName());
     return res;
   }
   const res = NextResponse.redirect(new URL('/', base), 303);
   const c = sessionCookie(newSession(r.body.user.id, r.body.epoch));
   res.cookies.set(c.name, c.value, c);
-  res.cookies.delete(oauthCookieName());
-  res.cookies.delete(inviteCookieName());
+  clearCookie(res, oauthCookieName());
+  clearCookie(res, inviteCookieName());
   return res;
 }
 

@@ -2,6 +2,7 @@
 // (bumped by "log out everywhere"), a CSRF token and an expiry. Signed with SESSION_SECRET.
 import crypto from 'node:crypto';
 import { cookies } from 'next/headers';
+import type { NextResponse } from 'next/server';
 import { env } from './env';
 
 export type Session = { u: string; e: number; c: string; x: number };
@@ -36,6 +37,15 @@ export function unseal<T>(value: string | undefined): T | null {
 
 export function cookieOptions(maxAge: number) {
   return { httpOnly: true, secure: env.secureCookies, sameSite: 'lax' as const, path: '/', maxAge };
+}
+
+/**
+ * Delete a cookie. Use this, never res.cookies.delete(): that sends a bare "expired" cookie
+ * without Secure or Path=/, and browsers silently ignore any __Host- cookie missing those,
+ * so in production the cookie would survive (logout would not log you out).
+ */
+export function clearCookie(res: NextResponse, name: string) {
+  res.cookies.set(name, '', { ...cookieOptions(0), expires: new Date(0) });
 }
 
 export function newSession(userId: string, epoch: number): Session {

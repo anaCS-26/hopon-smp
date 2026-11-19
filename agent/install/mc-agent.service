@@ -4,6 +4,10 @@ Wants=network-online.target
 After=network-online.target
 # Posts to Discord if the agent gives up restarting (mc-alert@.service is installed by server/).
 OnFailure=mc-alert@%n.service
+# "Gives up" = 5 starts within 2 minutes. With the default (5 in 10 s) and RestartSec=5 the
+# limit could never be reached, so the unit never failed and the alert above never fired.
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple

@@ -10,3 +10,8 @@ SocketUser=minecraft
 SocketGroup=minecraft
 SocketMode=0660
 RemoveOnStop=true
+# PartOf= only removes the pipe on a deliberate stop/restart. When the server exits on its own
+# (crash, or "stop" typed in the console) the pipe stays, so throw away anything still queued
+# in it. Otherwise leftover input (e.g. a "stop") would be read by the next start, or would
+# even start the server again by itself (this socket starts minecraft.service when written to).
+FlushPending=true
